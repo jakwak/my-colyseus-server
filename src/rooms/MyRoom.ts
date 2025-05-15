@@ -12,7 +12,6 @@ export class MyRoom extends Room {
       console.log("MyRoom received move from", client.sessionId, ":", data);
       const player = this.state.players.get(client.sessionId);
       if (player) {
-        player.name = data.name;
         player.x = data.x;
         player.y = data.y;
       }
@@ -21,12 +20,15 @@ export class MyRoom extends Room {
 
   onJoin(client: Client, options: any) {
     this.state.players.set(client.sessionId, new Player());
+    console.log("Player joined:", client.sessionId);
   }
 
   onLeave(client: Client, consented: boolean) {
     this.state.players.delete(client.sessionId);
+    console.log("Player left:", client.sessionId);
   }
 
   onDispose() {
+    console.log("Room disposed");
   }
 }
