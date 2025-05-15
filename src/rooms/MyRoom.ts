@@ -2,16 +2,20 @@ import { Room, Client } from "@colyseus/core";
 import { MyState, Player } from "./MyState";
 
 export class MyRoom extends Room {
-  maxClients = 4;
+  maxClients = 12;
   state = new MyState();
 
   onCreate(options: any) {
     console.log("MyRoom created!", options);
 
-    this.onMessage("message_type", (client, data) => {
-        console.log("MyRoom received message from", client.sessionId, ":", data);
-        // this.state.movePlayer(client.sessionId, data);
-        this.broadcast("message_type", `(${client.sessionId}) ${data}`);
+    this.onMessage("move", (client, data) => {
+      console.log("MyRoom received move from", client.sessionId, ":", data);
+      const player = this.state.players.get(client.sessionId);
+      if (player) {
+        player.name = data.name;
+        player.x = data.x;
+        player.y = data.y;
+      }
     });
   }
 
