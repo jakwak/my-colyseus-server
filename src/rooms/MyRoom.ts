@@ -9,7 +9,7 @@ export class MyRoom extends Room {
     console.log("MyRoom created!", options);
 
     this.onMessage("move", (client, data) => {
-      console.log("MyRoom received move from", client.sessionId, ":", data);
+      // console.log("MyRoom received move from", client.sessionId, ":", data);
       const player = this.state.players.get(client.sessionId);
       if (player) {
         player.x = data.x;
