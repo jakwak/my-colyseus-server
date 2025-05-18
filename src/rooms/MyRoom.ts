@@ -7,8 +7,7 @@ export class MyRoom extends Room {
   availableColors = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];  // 12개의 색상 인덱스로 확장
 
   onCreate(options: any) {
-    console.log("MyRoom created!", options);
-
+    // console.log("MyRoom created!===>", options);
     this.onMessage("move", (client, data) => {
       const player = this.state.players.get(client.sessionId);
       if (player) {
@@ -49,7 +48,13 @@ export class MyRoom extends Room {
   }
 
   onJoin(client: Client, options: any) {
-    const player = new Player();
+    // console.log("onJoin!===>", options);
+
+    const player = new Player();    
+    player.name = options.name || "Guest";
+    
+    console.log("player.name===>", player.name);
+    
     // 랜덤 색상 할당
     player.color = this.getRandomAvailableColor();
     this.state.players.set(client.sessionId, player);
