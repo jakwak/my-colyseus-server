@@ -49,16 +49,10 @@ export class MyRoom extends Room {
 
   onJoin(client: Client, options: any) {
     // console.log("onJoin!===>", options);
+    const player = new Player(options.name, this.getRandomAvailableColor());        
 
-    const player = new Player();    
-    player.name = options.name || "Guest";
-    
-    console.log("player.name===>", player.name);
-    
-    // 랜덤 색상 할당
-    player.color = this.getRandomAvailableColor();
     this.state.players.set(client.sessionId, player);
-    console.log(`Player joined: ${client.sessionId} with color ${player.color}`);
+    console.log(`Player ${player.name} joined: ${client.sessionId} with color ${player.color}`);
   }
 
   onLeave(client: Client, consented: boolean) {
@@ -68,7 +62,7 @@ export class MyRoom extends Room {
       this.returnColorToPool(player.color);
     }
     this.state.players.delete(client.sessionId);
-    console.log("Player left:", client.sessionId);
+    console.log(`Player ${player.name} left:`, client.sessionId);
   }
 
   onDispose() {
