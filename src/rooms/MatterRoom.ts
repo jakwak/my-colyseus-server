@@ -4,8 +4,8 @@ import { createPlayer, moveBody, updatePhysics, world } from "./physics";
 import Matter from "matter-js";
 
 class Player extends Schema {
-  @type("number") x = 0;
-  @type("number") y = 0;
+  @type("number") x = 100;
+  @type("number") y = 100;
 }
 
 class State extends Schema {
@@ -21,14 +21,19 @@ export class MatterRoom extends Room<State> {
     this.onMessage("move", (client, data: { x: number; y: number }) => {
       const body = this.playerBodies.get(client.sessionId);
       if (body) {
+        // 이동 벡터 정규화
+        const length = Math.sqrt(data.x * data.x + data.y * data.y);
+        if (length > 0) {
+          data.x = data.x / length;
+          data.y = data.y / length;
+        }
         moveBody(body, data);
       }
     });
 
-    // Matter.js 주기적 업데이트
+    // Matter.js 주기적 업데이트 (60FPS로 제한)
     this.setSimulationInterval((deltaTime) => {
       updatePhysics(deltaTime);
-
       // 플레이어 상태 업데이트
       this.playerBodies.forEach((body, id) => {
         const player = this.state.players.get(id);
@@ -37,7 +42,7 @@ export class MatterRoom extends Room<State> {
           player.y = body.position.y;
         }
       });
-    });
+    }); // 60FPS로 고정
   }
 
   onJoin(client: Client) {
