@@ -1,6 +1,6 @@
 import { Room, Client } from "colyseus";
 import { Schema, type, MapSchema } from "@colyseus/schema";
-import { engine, world, createPlayer, moveBody, updatePhysics } from "./physics";
+import { engine, world, createPlayer, moveBody, updatePhysics, matterToDefold } from "./physics";
 import Matter from "matter-js";
 
 class Player extends Schema {
@@ -23,8 +23,9 @@ export class MatterRoom extends Room<State> {
         const body = world.bodies.find(b => b.label === client.sessionId);
         if (body) {
           moveBody(body, data);
-          player.x = body.position.x;
-          player.y = body.position.y;
+          const defoldPos = matterToDefold(body.position);
+          player.x = defoldPos.x;
+          player.y = defoldPos.y;
           player.isControllable = body.isControllable;
         }
       }
@@ -37,8 +38,9 @@ export class MatterRoom extends Room<State> {
       world.bodies.forEach((body) => {
         const player = this.state.players.get(body.label);
         if (player) {
-          player.x = body.position.x;
-          player.y = body.position.y;
+          const defoldPos = matterToDefold(body.position);
+          player.x = defoldPos.x;
+          player.y = defoldPos.y;
           player.isControllable = body.isControllable;
         }
       });
@@ -48,8 +50,9 @@ export class MatterRoom extends Room<State> {
   onJoin(client: Client) {
     const body = createPlayer(client.sessionId);
     const player = new Player();
-    player.x = body.position.x;
-    player.y = body.position.y;
+    const defoldPos = matterToDefold(body.position);
+    player.x = defoldPos.x;
+    player.y = defoldPos.y;
     player.isControllable = body.isControllable;
     this.state.players.set(client.sessionId, player);
   }

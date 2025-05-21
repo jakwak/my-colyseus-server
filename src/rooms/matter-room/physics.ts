@@ -1,5 +1,6 @@
 import Matter from "matter-js";
 
+// Matter.js 타입 확장
 declare module "matter-js" {
   interface Body {
     isControllable: boolean;
@@ -9,6 +10,7 @@ declare module "matter-js" {
   }
 }
 
+// 물리 엔진과 월드 생성
 export const engine = Matter.Engine.create();
 export const world = engine.world;
 
@@ -17,14 +19,33 @@ const WALL_THICKNESS = 20;
 const SCREEN_WIDTH = 960;
 const SCREEN_HEIGHT = 640;
 
-// 중력 설정 (y축 방향)
-engine.gravity.y = 0;
+// 좌표 변환 함수
+export function defoldToMatter(pos: { x: number; y: number }) {
+  return {
+    x: pos.x,
+    y: SCREEN_HEIGHT - pos.y  // y축 반전
+  };
+}
 
-// 경계선 생성
+export function matterToDefold(pos: { x: number; y: number }) {
+  return {
+    x: pos.x,
+    y: SCREEN_HEIGHT - pos.y  // y축 반전
+  };
+}
+
+// 중력 설정 (y축 방향)
+engine.gravity.y = 0.5;
+
+// 경계선 생성 (상, 하, 좌, 우 벽)
 const walls = [
+  // 상단 벽
   Matter.Bodies.rectangle(SCREEN_WIDTH/2, WALL_THICKNESS/2, SCREEN_WIDTH, WALL_THICKNESS, { isStatic: true, label: "wall" }),
+  // 하단 벽
   Matter.Bodies.rectangle(SCREEN_WIDTH/2, SCREEN_HEIGHT - WALL_THICKNESS/2, SCREEN_WIDTH, WALL_THICKNESS, { isStatic: true, label: "wall" }),
+  // 좌측 벽
   Matter.Bodies.rectangle(WALL_THICKNESS/2, SCREEN_HEIGHT/2, WALL_THICKNESS, SCREEN_HEIGHT, { isStatic: true, label: "wall" }),
+  // 우측 벽
   Matter.Bodies.rectangle(SCREEN_WIDTH - WALL_THICKNESS/2, SCREEN_HEIGHT/2, WALL_THICKNESS, SCREEN_HEIGHT, { isStatic: true, label: "wall" })
 ];
 Matter.World.add(world, walls);
@@ -35,6 +56,7 @@ Matter.Events.on(engine, 'collisionStart', (event) => {
     const bodyA = pair.bodyA;
     const bodyB = pair.bodyB;
     
+    // 벽과 충돌한 경우
     if (bodyA.label === "wall" || bodyB.label === "wall") {
       const playerBody = bodyA.label === "wall" ? bodyB : bodyA;
       if (playerBody.label !== "wall") {
@@ -47,16 +69,22 @@ Matter.Events.on(engine, 'collisionStart', (event) => {
 
 // 플레이어 생성
 export function createPlayer(id: string) {
+  const defoldPos = {
+    x: Math.random() * (SCREEN_WIDTH - 100) + 50,
+    y: Math.random() * (SCREEN_HEIGHT - 100) + 50
+  };
+  const matterPos = defoldToMatter(defoldPos);
+  
   const body = Matter.Bodies.circle(
-    Math.random() * (SCREEN_WIDTH - 100) + 50,
-    SCREEN_HEIGHT - (Math.random() * (SCREEN_HEIGHT - 100) + 50),
-    20,
+    matterPos.x,
+    matterPos.y,
+    20,  // 반지름
     { 
-      label: id, 
-      restitution: 1.5, 
-      friction: 0.05, 
-      frictionAir: 0.05,
-      isControllable: true 
+      label: id,  // 플레이어 식별자
+      restitution: 1.5,  // 반발 계수 (1.0보다 크면 충돌할 때마다 에너지가 증가)
+      friction: 0.05,  // 마찰 계수 (낮을수록 미끄러움)
+      frictionAir: 0.05,  // 공기 저항 (낮을수록 더 오래 움직임)
+      isControllable: true  // 제어 가능 상태
     }
   );
   Matter.World.add(world, body);
@@ -66,7 +94,11 @@ export function createPlayer(id: string) {
 // 이동 처리
 export function moveBody(body: Matter.Body, direction: { x: number; y: number }) {
   if (body.isControllable) {
-    Matter.Body.setVelocity(body, { x: direction.x * 10, y: -direction.y * 10 });
+    // Defold의 y축 방향을 Matter.js의 y축 방향으로 변환
+    Matter.Body.setVelocity(body, { 
+      x: direction.x * 10, 
+      y: direction.y * 10  // y축 방향 반전 제거
+    });
   }
 }
 
