@@ -15,7 +15,7 @@ export const engine = Matter.Engine.create();
 export const world = engine.world;
 
 // 화면 크기 설정
-const WALL_THICKNESS = 10;
+const WALL_THICKNESS = 20;
 const SCREEN_WIDTH = 960;
 const SCREEN_HEIGHT = 640;
 
@@ -85,8 +85,8 @@ export function createPlayer(id: string) {
     { 
       label: id,  // 플레이어 식별자
       restitution: 0.5,  // 반발 계수 (1.0 미만으로 조정)
-      friction: 0.8,  // 마찰 계수 
-      frictionAir: 0.8,  // 공기 저항
+      friction: 0.1,  // 마찰 계수 
+      frictionAir: 0.1,  // 공기 저항
       isControllable: true,  // 제어 가능 상태
       inertia: Infinity,  // 회전 방지
       inverseInertia: 0,  // 회전 방지

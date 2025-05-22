@@ -113,7 +113,7 @@ export class MatterRoom extends Room<State> {
       
       // 클라이언트에 바로 메시지로 응답
       client.send("debug_bodies_update", { bodies: bodyDataList });
-      console.log(`디버그 바디 데이터 ${bodyDataList.length}개 전송`);
+      // console.log(`디버그 바디 데이터 ${bodyDataList.length}개 전송`);
     });
 
     // Matter.js 주기적 업데이트 (60FPS로 제한)
@@ -128,6 +128,11 @@ export class MatterRoom extends Room<State> {
           player.x = defoldPos.x;
           player.y = defoldPos.y;
           player.isControllable = body.isControllable;
+        }
+        // 패드 위치 업데이트
+        if (body.label === "pad") {
+          const defoldPos = matterToDefold(body.position);
+          this.broadcast("update_pad_position", { x: defoldPos.x, y: defoldPos.y });
         }
       });
       
