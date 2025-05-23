@@ -112,8 +112,7 @@ export class MatterRoom extends Room<State> {
       });
       
       // 클라이언트에 바로 메시지로 응답
-      client.send("debug_bodies_update", { bodies: bodyDataList });
-      // console.log(`디버그 바디 데이터 ${bodyDataList.length}개 전송`);
+      client.send("debug_bodies", { bodies: bodyDataList });
     });
 
     // Matter.js 주기적 업데이트 (60FPS로 제한)
