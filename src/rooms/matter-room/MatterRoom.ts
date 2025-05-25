@@ -1,209 +1,274 @@
-import { Room, Client } from "colyseus";
-import { Schema, type, MapSchema, ArraySchema } from "@colyseus/schema";
-import { engine, world, createPlayer, moveBody, updatePhysics, matterToDefold, defoldToMatter, setBodyPosition } from "./physics";
-import Matter from "matter-js";
-
-// 물리 바디 정보를 담을 클래스
-class PhysicsBody extends Schema {
-  @type("string") label: string = "";
-  @type("number") x: number = 0;
-  @type("number") y: number = 0;
-  @type("number") width: number = 0;
-  @type("number") height: number = 0;
-  @type("number") radius: number = 0;
-  @type("string") shape: string = "rectangle"; // "rectangle" 또는 "circle"
-  @type("boolean") isStatic: boolean = false;
-}
-
-class Player extends Schema {
-  @type("number") x: number = 0;
-  @type("number") y: number = 0;
-  @type("boolean") isControllable: boolean = true;
-}
-
-class State extends Schema {
-  @type({ map: Player }) players = new MapSchema<Player>();
-  @type([PhysicsBody]) debugBodies = new ArraySchema<PhysicsBody>();
-}
+import { Room, Client } from 'colyseus'
+import { PhysicsBody, Player, State, Npc } from '../schema/MatterRoomState'
+import {
+  createEngineAndWorld,
+  addWalls,
+  createNpcBody,
+  createPlayer,
+  moveBody,
+  updatePhysics,
+  matterToDefold,
+  defoldToMatter,
+  setBodyPosition,
+} from './physics'
+import Matter from 'matter-js'
 
 export class MatterRoom extends Room<State> {
   // 디버그 모드 (true면 물리 바디 정보 전송)
-  private debugPhysics: boolean = true;
-  
-  onCreate() {
-    this.state = new State();
-    
-    this.onMessage("move", (client, data) => {
-      const player = this.state.players.get(client.sessionId);
-      if (player) {
-        const body = world.bodies.find(b => b.label === client.sessionId);
-        if (body) {
-          moveBody(body, data);
-          const defoldPos = matterToDefold(body.position);
-          player.x = defoldPos.x;
-          player.y = defoldPos.y;
-          player.isControllable = body.isControllable;
-        }
-      }
-    });
-    
-    // 위치 동기화 메시지 처리
-    this.onMessage("position_sync", (client, data) => {
-      const player = this.state.players.get(client.sessionId);
-      if (player) {
-        const body = world.bodies.find(b => b.label === client.sessionId);
-        if (body) {
-          console.log(`위치 동기화 요청: ${data.x}, ${data.y} (클라이언트: ${client.sessionId})`);
-          
-          // Defold 좌표를 Matter 좌표로 변환
-          const matterPos = defoldToMatter({ x: data.x, y: data.y });
-          
-          // 바디 위치 강제 설정
-          setBodyPosition(body, matterPos);
-          
-          // 플레이어 스키마 업데이트
-          player.x = data.x;
-          player.y = data.y;
-          
-          // 속도 초기화
-          Matter.Body.setVelocity(body, { x: 0, y: 0 });
-          Matter.Body.setAngularVelocity(body, 0);
-        }
-      }
-    });
-    
-    // 디버그 모드 토글 메시지 처리
-    this.onMessage("toggle_debug", (client, data) => {
-      this.debugPhysics = data.enabled;
-      console.log(`디버그 모드 ${this.debugPhysics ? "활성화" : "비활성화"}`);
-    });
+  private debugPhysics: boolean = true
+  private engine: Matter.Engine
+  private world: Matter.World
 
-    // 디버그 바디 요청 메시지 처리 - Schema 방식 대신 직접 메시지 교환
-    this.onMessage("get_debug_bodies", (client, data) => {
-      // 모든 물리 바디 정보 수집
-      const bodyDataList: Array<{
-        label: string;
-        x: number;
-        y: number;
-        shape: string;
-        radius: number;
-        width: number;
-        height: number;
-        isStatic: boolean;
-      }> = [];
-      
-      world.bodies.forEach(body => {
-        // Defold 좌표계로 변환
-        const defoldPos = matterToDefold(body.position);
-        
-        // 바디 정보 객체 생성
-        const bodyData = {
-          label: body.label,
-          x: defoldPos.x,
-          y: defoldPos.y,
-          shape: body.circleRadius ? "circle" : "rectangle",
-          radius: body.circleRadius || 0,
-          width: body.bounds ? (body.bounds.max.x - body.bounds.min.x) : 0,
-          height: body.bounds ? (body.bounds.max.y - body.bounds.min.y) : 0,
-          isStatic: body.isStatic
-        };
-        
-        bodyDataList.push(bodyData);
-      });
-      
-      // 클라이언트에 바로 메시지로 응답
-      client.send("debug_bodies", { bodies: bodyDataList });
-    });
-
-    // Matter.js 주기적 업데이트 (60FPS로 제한)
-    this.setSimulationInterval((deltaTime) => {
-      updatePhysics(deltaTime);
-      
-      // 플레이어 상태 업데이트
-      world.bodies.forEach((body) => {
-        const player = this.state.players.get(body.label);
-        if (player) {
-          const defoldPos = matterToDefold(body.position);
-          player.x = defoldPos.x;
-          player.y = defoldPos.y;
-          player.isControllable = body.isControllable;
-        }
-        // 패드 위치 업데이트
-        if (body.label === "pad") {
-          const defoldPos = matterToDefold(body.position);
-          this.broadcast("update_pad_position", { x: defoldPos.x, y: defoldPos.y });
-        }
-      });
-      
-      // 디버그 모드일 때 물리 바디 정보 업데이트
-      if (this.debugPhysics) {
-        this.updateDebugBodies();
-      }
-    }, 1000 / 60); // 60FPS로 고정
+  // NPC 이동 상태 관리용
+  private npcMoveState: {
+    dir: { x: number; y: number };
+    speed: number;
+    changeTimer: number;
   }
-  
+
+  onCreate() {
+    this.state = new State()
+    const { engine, world } = createEngineAndWorld()
+    this.engine = engine
+    this.world = world
+    addWalls(this.world)
+
+    // === 시험용 NPC 1개 생성 ===
+    const npcId = 'npc_1'
+    const npcSize = 20
+    const npcPos = { x: 200, y: 400 }
+    const npcColors = [
+      "#FFB300", "#FF7043", "#FF8A65", "#FFD54F", "#81C784", "#4FC3F7", "#64B5F6", "#BA68C8", "#F06292", "#A1887F", "#90A4AE", "#AED581", "#FFFFFF"
+    ];
+    const npcColor = npcColors[Math.floor(Math.random() * npcColors.length)];
+    createNpcBody(this.world, npcId, npcPos.x, npcPos.y, npcSize)
+
+    const npc = new Npc()
+    npc.id = npcId
+    npc.x = npcPos.x
+    npc.y = npcPos.y
+    npc.size = npcSize
+    npc.shape = 'circle'
+    npc.owner_id = 'server'
+    npc.power = 10
+    npc.color = npcColor
+    this.state.npcs.set(npcId, npc)
+    // === 시험용 NPC 생성 끝 ===
+
+    // NPC 이동 상태 관리용
+    this.npcMoveState = {
+      dir: { x: Math.random() * 2 - 1, y: Math.random() * 2 - 1 },
+      speed: 40 + Math.random() * 40, // 40~80
+      changeTimer: 0
+    }
+
+    this.onMessage('move', this.handleMove.bind(this))
+    this.onMessage('position_sync', this.handlePositionSync.bind(this))
+    this.onMessage('toggle_debug', this.handleToggleDebug.bind(this))
+    this.onMessage('get_debug_bodies', this.handleGetDebugBodies.bind(this))
+
+    this.setSimulationInterval((deltaTime) => {
+      Matter.Engine.update(this.engine, deltaTime)
+
+      // === 시험용 NPC 이동 ===
+      const npcBody = this.world.bodies.find(b => b.label === npcId)
+      if (npcBody) {
+        // 방향 주기적으로 랜덤 변경
+        this.npcMoveState.changeTimer += deltaTime
+        if (this.npcMoveState.changeTimer > 1000 + Math.random() * 1000) { // 1~2초마다
+          const angle = Math.random() * Math.PI * 2
+          this.npcMoveState.dir.x = Math.cos(angle)
+          this.npcMoveState.dir.y = Math.sin(angle)
+          this.npcMoveState.speed = 40 + Math.random() * 40 // 40~80
+          this.npcMoveState.changeTimer = 0
+        }
+        // 속도 적용
+        Matter.Body.setVelocity(npcBody, {
+          x: this.npcMoveState.dir.x * this.npcMoveState.speed / 60,
+          y: this.npcMoveState.dir.y * this.npcMoveState.speed / 60
+        })
+        // Colyseus State 위치 동기화
+        const npcState = this.state.npcs.get(npcId)
+        if (npcState) {
+          const defoldPos = matterToDefold(npcBody.position)
+          npcState.x = defoldPos.x
+          npcState.y = defoldPos.y
+        }
+      }
+      // === NPC 이동 끝 ===
+
+      // 플레이어 상태 업데이트
+      this.world.bodies.forEach((body) => {
+        const player = this.state.players.get(body.label)
+        if (player) {
+          const defoldPos = matterToDefold(body.position)
+          player.x = defoldPos.x
+          player.y = defoldPos.y
+        }
+      })
+      if (this.debugPhysics) {
+        this.updateDebugBodies()
+      }
+    }, 1000 / 60)
+  }
+
+  private handleMove(client: Client, data: any) {
+    const player = this.state.players.get(client.sessionId)
+    if (player) {
+      const body = this.world.bodies.find((b) => b.label === client.sessionId)
+      if (body) {
+        moveBody(body, data)
+        const defoldPos = matterToDefold(body.position)
+        player.x = defoldPos.x
+        player.y = defoldPos.y
+      }
+    }
+  }
+
+  private handlePositionSync(client: Client, data: any) {
+    const player = this.state.players.get(client.sessionId)
+    if (player) {
+      const body = this.world.bodies.find((b) => b.label === client.sessionId)
+      if (body) {
+        const matterPos = defoldToMatter({ x: data.x, y: data.y })
+        setBodyPosition(body, matterPos)
+        player.x = data.x
+        player.y = data.y
+        Matter.Body.setVelocity(body, { x: 0, y: 0 })
+        Matter.Body.setAngularVelocity(body, 0)
+      }
+    }
+  }
+
+  private handleToggleDebug(client: Client, data: any) {
+    this.debugPhysics = data.enabled
+    console.log(`디버그 모드 ${this.debugPhysics ? '활성화' : '비활성화'}`)
+  }
+
+  private handleGetDebugBodies(client: Client, data: any) {
+    const bodyDataList: Array<{
+      label: string
+      x: number
+      y: number
+      shape: string
+      radius: number
+      width: number
+      height: number
+      isStatic: boolean
+    }> = []
+    this.world.bodies.forEach((body) => {
+      const defoldPos = matterToDefold(body.position)
+      const bodyData = {
+        label: body.label,
+        x: defoldPos.x,
+        y: defoldPos.y,
+        shape: body.circleRadius ? 'circle' : 'rectangle',
+        radius: body.circleRadius || 0,
+        width: body.bounds ? body.bounds.max.x - body.bounds.min.x : 0,
+        height: body.bounds ? body.bounds.max.y - body.bounds.min.y : 0,
+        isStatic: body.isStatic,
+      }
+      bodyDataList.push(bodyData)
+    })
+    client.send('debug_bodies', { bodies: bodyDataList })
+  }
+
   // 디버그용 물리 바디 정보 업데이트
   private updateDebugBodies() {
-    // 기존 바디 정보 초기화
-    this.state.debugBodies.clear();
-    
-    // 모든 물리 바디 정보 수집
-    world.bodies.forEach(body => {
-      const debugBody = new PhysicsBody();
-      debugBody.label = body.label;
-      
-      // Defold 좌표계로 변환
-      const defoldPos = matterToDefold(body.position);
-      debugBody.x = defoldPos.x;
-      debugBody.y = defoldPos.y;
-      
-      // 바디 타입 및 크기 정보
-      if (body.circleRadius) {
-        debugBody.shape = "circle";
-        debugBody.radius = body.circleRadius;
-      } else {
-        debugBody.shape = "rectangle";
-        // 바운딩 박스 크기 계산
-        const bounds = body.bounds;
-        debugBody.width = bounds.max.x - bounds.min.x;
-        debugBody.height = bounds.max.y - bounds.min.y;
-      }
-      
-      debugBody.isStatic = body.isStatic;
-      
-      // 상태에 추가
-      this.state.debugBodies.push(debugBody);
-    });
+    // 첫 번째 실행인지 확인 (debugBodies가 비어있으면 모든 바디 추가)
+    if (this.state.debugBodies.length === 0) {
+      // 처음에만 모든 바디 추가
+      this.world.bodies.forEach((body) => {
+        const debugBody = new PhysicsBody()
+        debugBody.label = body.label
+
+        // Defold 좌표계로 변환
+        const defoldPos = matterToDefold(body.position)
+        debugBody.x = defoldPos.x
+        debugBody.y = defoldPos.y
+
+        // 바디 타입 및 크기 정보
+        if (body.circleRadius) {
+          debugBody.shape = 'circle'
+          debugBody.radius = body.circleRadius
+        } else {
+          debugBody.shape = 'rectangle'
+          // 바운딩 박스 크기 계산
+          const bounds = body.bounds
+          debugBody.width = bounds.max.x - bounds.min.x
+          debugBody.height = bounds.max.y - bounds.min.y
+        }
+
+        debugBody.isStatic = body.isStatic
+
+        // 상태에 추가
+        this.state.debugBodies.push(debugBody)
+      })
+    } else {
+      // 이미 바디들이 있으면 "pad" 라벨인 것만 위치 업데이트
+      this.world.bodies.forEach((body) => {
+        if (body.label === 'pad') {
+          // 기존 pad 바디 찾기
+          const existingDebugBody = this.state.debugBodies.find(
+            (db) => db.label === 'pad'
+          )
+          if (existingDebugBody) {
+            // Defold 좌표계로 변환
+            const defoldPos = matterToDefold(body.position)
+            existingDebugBody.x = defoldPos.x
+            existingDebugBody.y = defoldPos.y
+          }
+        }
+      })
+    }
   }
 
-  onJoin(client: Client) {
-    const body = createPlayer(client.sessionId);
-    const player = new Player();
-    const defoldPos = matterToDefold(body.position);
-    player.x = defoldPos.x;
-    player.y = defoldPos.y;
-    
-    // 처음에는 제어 불가 상태로 설정
-    body.isControllable = false;
-    player.isControllable = false;
-    
-    this.state.players.set(client.sessionId, player);
-    
-    // 1초 후에 제어 가능 상태로 변경
-    setTimeout(() => {
-      if (this.state.players.has(client.sessionId)) {
-        body.isControllable = true;
-        player.isControllable = true;
-      }
-    }, 1000);
+  onJoin(
+    client: Client,
+    options?: { x?: number; y?: number; username?: string }
+  ) {
+    // 클라이언트에서 전달한 시작 위치 사용 (없으면 디폴트)
+    const startPos =
+      options && options.x !== undefined && options.y !== undefined
+        ? { x: options.x, y: options.y }
+        : undefined
+
+    // State의 메서드로 색상 할당
+    const color = this.state.getRandomAvailableColor()
+    // username 할당
+    const username = options && options.username ? options.username : '무명인'
+
+    const body = createPlayer(this.world, client.sessionId, startPos)
+    const player = new Player()
+    const defoldPos = matterToDefold(body.position)
+    player.x = defoldPos.x
+    player.y = defoldPos.y
+    player.color = color
+    player.username = username
+
+    console.log(
+      `플레이어 ${client.sessionId} 생성됨 - 위치: (${player.x}, ${player.y}), 색상: ${player.color}, 이름: ${player.username}`
+    )
+
+    this.state.players.set(client.sessionId, player)
   }
 
   onLeave(client: Client) {
-    const body = world.bodies.find(b => b.label === client.sessionId);
-    if (body) {
-      Matter.World.remove(world, body);
+    // State의 메서드로 색상 반환
+    const player = this.state.players.get(client.sessionId)
+    if (player && player.color) {
+      this.state.returnColorToPool(player.color)
     }
-    this.state.players.delete(client.sessionId);
+    const body = this.world.bodies.find((b) => b.label === client.sessionId)
+    if (body) {
+      Matter.World.remove(this.world, body)
+    }
+    this.state.players.delete(client.sessionId)
+
+    // 모든 플레이어가 나가면 방 삭제
+    if (this.state.players.size === 0) {
+      console.log('모든 플레이어가 나가서 방을 삭제합니다.')
+      this.disconnect() // Colyseus Room의 dispose()를 호출하여 방 삭제
+    }
   }
 }
-
