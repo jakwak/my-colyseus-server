@@ -26,6 +26,50 @@ export class MatterRoom extends Room<State> {
     changeTimer: number;
   }
 
+  // === 시험용 NPC 이동 ===
+  // waypoint 리스트를 화면 내 안전한 위치로 미리 정의
+  private npcWaypoints = [
+    { x: 100, y: 100 },
+    { x: 860, y: 100 },
+    { x: 860, y: 540 },
+    { x: 100, y: 540 },
+    { x: 480, y: 320 },
+    { x: 300, y: 200 },
+    { x: 700, y: 400 },
+  ];
+  private npcCurrentWaypointIdx = 0;
+
+  private moveNpc(npcId: string, npcSize: number, deltaTime: number) {
+    const npcBody = this.world.bodies.find(b => b.label === npcId)
+    if (!npcBody) return;
+    const speed = 30; // 일정한 느린 속도
+    const waypoint = this.npcWaypoints[this.npcCurrentWaypointIdx];
+    // 방향 벡터 계산
+    const dx = waypoint.x - npcBody.position.x;
+    const dy = waypoint.y - npcBody.position.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist < 10) {
+      // waypoint에 도달하면 다음 waypoint로
+      this.npcCurrentWaypointIdx = (this.npcCurrentWaypointIdx + 1) % this.npcWaypoints.length;
+      return;
+    }
+    // 단위 벡터로 이동
+    const dirX = dx / dist;
+    const dirY = dy / dist;
+    Matter.Body.setVelocity(npcBody, {
+      x: dirX * speed / 60,
+      y: dirY * speed / 60
+    });
+    // Colyseus State 위치 동기화
+    const npcState = this.state.npcs.get(npcId)
+    if (npcState) {
+      const defoldPos = matterToDefold(npcBody.position)
+      npcState.x = defoldPos.x
+      npcState.y = defoldPos.y
+    }
+  }
+  // === 시험용 NPC 이동 끝 ===
+
   onCreate() {
     this.state = new State()
     const { engine, world } = createEngineAndWorld()
@@ -67,34 +111,13 @@ export class MatterRoom extends Room<State> {
     this.onMessage('toggle_debug', this.handleToggleDebug.bind(this))
     this.onMessage('get_debug_bodies', this.handleGetDebugBodies.bind(this))
 
+
+    //====================================
     this.setSimulationInterval((deltaTime) => {
       Matter.Engine.update(this.engine, deltaTime)
 
       // === 시험용 NPC 이동 ===
-      const npcBody = this.world.bodies.find(b => b.label === npcId)
-      if (npcBody) {
-        // 방향 주기적으로 랜덤 변경
-        this.npcMoveState.changeTimer += deltaTime
-        if (this.npcMoveState.changeTimer > 1000 + Math.random() * 1000) { // 1~2초마다
-          const angle = Math.random() * Math.PI * 2
-          this.npcMoveState.dir.x = Math.cos(angle)
-          this.npcMoveState.dir.y = Math.sin(angle)
-          this.npcMoveState.speed = 40 + Math.random() * 40 // 40~80
-          this.npcMoveState.changeTimer = 0
-        }
-        // 속도 적용
-        Matter.Body.setVelocity(npcBody, {
-          x: this.npcMoveState.dir.x * this.npcMoveState.speed / 60,
-          y: this.npcMoveState.dir.y * this.npcMoveState.speed / 60
-        })
-        // Colyseus State 위치 동기화
-        const npcState = this.state.npcs.get(npcId)
-        if (npcState) {
-          const defoldPos = matterToDefold(npcBody.position)
-          npcState.x = defoldPos.x
-          npcState.y = defoldPos.y
-        }
-      }
+      this.moveNpc(npcId, npcSize, deltaTime)
       // === NPC 이동 끝 ===
 
       // 플레이어 상태 업데이트
