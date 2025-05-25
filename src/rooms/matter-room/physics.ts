@@ -12,8 +12,8 @@ declare module "matter-js" {
 
 // 화면 크기 설정
 export const WALL_THICKNESS = 20;
-export const SCREEN_WIDTH = 960;
-export const SCREEN_HEIGHT = 640;
+export const SCREEN_WIDTH = 2000;
+export const SCREEN_HEIGHT = 2000;
 
 export function createEngineAndWorld() {
   const engine = Matter.Engine.create();
