@@ -66,6 +66,8 @@ export class MatterRoom extends Room<State> {
       const defoldPos = matterToDefold(npcBody.position)
       npcState.x = defoldPos.x
       npcState.y = defoldPos.y
+      npcState.dirx = dirX
+      npcState.diry = dirY
     }
   }
   // === 시험용 NPC 이동 끝 ===

@@ -25,9 +25,11 @@ export class Npc extends Schema {
   @type("string") owner_id: string = "";
   @type("string") id: string = "";
   @type("number") size: number = 1;
-  @type("string") shape: string = "rectangle"; // 예: "rectangle", "circle" 등
+  @type("string") shape: string = "circle"; // 예: "rectangle", "circle" 등
   @type("number") power: number = 0;
   @type("string") color: string = "#FFFFFF";
+  @type("number") dirx: number = 0;
+  @type("number") diry: number = 0;
 }
 
 export class State extends Schema {
