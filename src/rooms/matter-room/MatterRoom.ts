@@ -29,13 +29,13 @@ export class MatterRoom extends Room<State> {
   // === 시험용 NPC 이동 ===
   // waypoint 리스트를 화면 내 안전한 위치로 미리 정의
   private npcWaypoints = [
-    { x: 100, y: 100 },
-    { x: 860, y: 100 },
-    { x: 860, y: 540 },
-    { x: 100, y: 540 },
-    { x: 480, y: 320 },
-    { x: 300, y: 200 },
-    { x: 700, y: 400 },
+    { x: 100, y: 1700 },
+    { x: 100, y: 1530 },
+    // { x: 860, y: 540 },
+    // { x: 100, y: 540 },
+    // { x: 480, y: 320 },
+    // { x: 300, y: 200 },
+    // { x: 700, y: 400 },
   ];
   private npcCurrentWaypointIdx = 0;
 
