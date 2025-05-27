@@ -121,7 +121,7 @@ export class MatterRoom extends Room<State> {
         }
       })
       if (this.debugPhysics) {
-        this.updateDebugBodies()
+        // this.updateDebugBodies()
       }
 
       // 총알 위치 동기화 및 삭제
@@ -138,16 +138,14 @@ export class MatterRoom extends Room<State> {
             bullet.x < -100 || bullet.x > 2100 ||
             bullet.y < -100 || bullet.y > 2100
           ) {
+            this.state.bullets.delete(bulletId);            
             Matter.World.remove(this.world, body);
-            this.state.bullets.delete(bulletId);
           }
         } else {
           // 바디가 없으면 state에서도 삭제
           this.state.bullets.delete(bulletId);
         }
       }
-
-      console.log(`총알 갯수: ${this.state.bullets.size}`);
     }, 1000 / 60)
   }
 
@@ -186,7 +184,6 @@ export class MatterRoom extends Room<State> {
 
   private handleGetDebugBodies(client: Client, data: any) {
     const bodyDataList: Array<{
-      id: number
       label: string
       x: number
       y: number
@@ -197,10 +194,8 @@ export class MatterRoom extends Room<State> {
       isStatic: boolean
     }> = []
     this.world.bodies.forEach((body) => {
-      console.log("body.id: ", body.id)
       const defoldPos = matterToDefold(body.position)
       const bodyData = {
-        id: body.id,
         label: body.label,
         x: defoldPos.x,
         y: defoldPos.y,
@@ -235,17 +230,17 @@ export class MatterRoom extends Room<State> {
     Matter.World.add(this.world, bulletBody);
 
     // State에 등록
-    const bullet = new Bullet();
-    bullet.id = bulletId;
-    bullet.type = type;
-    bullet.x = x;
-    bullet.y = SCREEN_HEIGHT - y;
-    bullet.dirx = dirx;
-    bullet.diry = diry * -1;
-    bullet.power = power;
-    bullet.velocity = velocity;
-    bullet.owner_id = client.sessionId;
-    this.state.bullets.set(bulletId, bullet);
+    // const bullet = new Bullet();
+    // bullet.id = bulletId;
+    // bullet.type = type;
+    // bullet.x = x;
+    // bullet.y = SCREEN_HEIGHT - y;
+    // bullet.dirx = dirx;
+    // bullet.diry = diry * -1;
+    // bullet.power = power;
+    // bullet.velocity = velocity;
+    // bullet.owner_id = client.sessionId;
+    // this.state.bullets.set(bulletId, bullet);
   }
 
   // 디버그용 물리 바디 정보 업데이트
@@ -258,7 +253,6 @@ export class MatterRoom extends Room<State> {
       
       this.world.bodies.forEach((body) => {
         const debugBody = new PhysicsBody()
-        debugBody.id = makeId("body")
         debugBody.label = body.label
 
         // Defold 좌표계로 변환
@@ -283,23 +277,6 @@ export class MatterRoom extends Room<State> {
         // 상태에 추가
         this.state.debugBodies.push(debugBody)
       })
-    // } else {
-    //   // 이미 바디들이 있으면 "pad" 라벨인 것만 위치 업데이트
-    //   this.world.bodies.forEach((body) => {
-    //     if (body.label === 'pad') {
-    //       // 기존 pad 바디 찾기
-    //       const existingDebugBody = this.state.debugBodies.find(
-    //         (db) => db.label === 'pad'
-    //       )
-    //       if (existingDebugBody) {
-    //         // Defold 좌표계로 변환
-    //         const defoldPos = matterToDefold(body.position)
-    //         existingDebugBody.x = defoldPos.x
-    //         existingDebugBody.y = defoldPos.y
-    //       }
-    //     }
-    //   })
-    // }
   }
 
   onJoin(
@@ -320,7 +297,6 @@ export class MatterRoom extends Room<State> {
     const body = createPlayer(this.world, client.sessionId, startPos)
     const player = new Player()
     const defoldPos = matterToDefold(body.position)
-    player.id = makeId("player")
     player.x = defoldPos.x
     player.y = defoldPos.y
     player.color = color
@@ -351,8 +327,4 @@ export class MatterRoom extends Room<State> {
       this.disconnect() // Colyseus Room의 dispose()를 호출하여 방 삭제
     }
   }
-}
-
-function makeId(prefix: string) {
-  return `${prefix}_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
 }

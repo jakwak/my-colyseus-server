@@ -2,7 +2,6 @@ import { Schema, type, MapSchema, ArraySchema } from "@colyseus/schema";
 
 // 물리 바디 정보를 담을 클래스
 export class PhysicsBody extends Schema {
-  @type("string") id: string = "";
   @type("string") label: string = "";
   @type("number") x: number = 0;
   @type("number") y: number = 0;
@@ -14,7 +13,6 @@ export class PhysicsBody extends Schema {
 }
 
 export class Player extends Schema {
-  @type("string") id: string = "";
   @type("number") x: number = 0;
   @type("number") y: number = 0;
   @type("string") color: string = ""; // 밝은 톤의 랜덤색상 (겹치지 않게 할당)
@@ -22,10 +20,10 @@ export class Player extends Schema {
 }
 
 export class Npc extends Schema {
-  @type("string") id: string = "";
   @type("number") x: number = 0;
   @type("number") y: number = 0;
   @type("string") owner_id: string = "";
+  @type("string") id: string = "";
   @type("number") size: number = 1;
   @type("string") shape: string = "circle"; // 예: "rectangle", "circle" 등
   @type("number") power: number = 0;
