@@ -1,5 +1,5 @@
 import { Room, Client } from 'colyseus'
-import { PhysicsBody, Player, State, Npc, Bullet } from '../schema/MatterRoomState'
+import { Player, State, Npc, Bullet } from '../schema/MatterRoomState'
 import {
   createEngineAndWorld,
   addWalls,
@@ -20,7 +20,6 @@ export class MatterRoom extends Room<State> {
   private engine: Matter.Engine
   private world: Matter.World
 
-
   // === 시험용 NPC 이동 ===
   // waypoint 리스트를 화면 내 안전한 위치로 미리 정의
   private npcWaypoints = [
@@ -31,30 +30,31 @@ export class MatterRoom extends Room<State> {
     defoldToMatter({ x: 1480, y: 320 }),
     defoldToMatter({ x: 300, y: 1200 }),
     defoldToMatter({ x: 1700, y: 1400 }),
-  ];
-  private npcCurrentWaypointIdx = 0;
+  ]
+  private npcCurrentWaypointIdx = 0
 
   private moveNpc(npcId: string, npcSize: number, deltaTime: number) {
-    const npcBody = this.world.bodies.find(b => b.label === npcId)
-    if (!npcBody) return;
-    const speed = 80; // 일정한 느린 속도
-    const waypoint = this.npcWaypoints[this.npcCurrentWaypointIdx];
+    const npcBody = this.world.bodies.find((b) => b.label === npcId)
+    if (!npcBody) return
+    const speed = 80 // 일정한 느린 속도
+    const waypoint = this.npcWaypoints[this.npcCurrentWaypointIdx]
     // 방향 벡터 계산
-    const dx = waypoint.x - npcBody.position.x;
-    const dy = waypoint.y - npcBody.position.y;
-    const dist = Math.sqrt(dx * dx + dy * dy);
+    const dx = waypoint.x - npcBody.position.x
+    const dy = waypoint.y - npcBody.position.y
+    const dist = Math.sqrt(dx * dx + dy * dy)
     if (dist < 10) {
       // waypoint에 도달하면 다음 waypoint로
-      this.npcCurrentWaypointIdx = (this.npcCurrentWaypointIdx + 1) % this.npcWaypoints.length;
-      return;
+      this.npcCurrentWaypointIdx =
+        (this.npcCurrentWaypointIdx + 1) % this.npcWaypoints.length
+      return
     }
     // 단위 벡터로 이동
-    const dirX = dx / dist;
-    const dirY = dy / dist;
+    const dirX = dx / dist
+    const dirY = dy / dist
     Matter.Body.setVelocity(npcBody, {
-      x: dirX * speed / 60,
-      y: dirY * speed / 60
-    });
+      x: (dirX * speed) / 60,
+      y: (dirY * speed) / 60,
+    })
     // Colyseus State 위치 동기화
     const npcState = this.state.npcs.get(npcId)
     if (npcState) {
@@ -79,9 +79,21 @@ export class MatterRoom extends Room<State> {
     const npcSize = 20
     const npcPos = { x: 200, y: 400 }
     const npcColors = [
-      "#FFB300", "#FF7043", "#FF8A65", "#FFD54F", "#81C784", "#4FC3F7", "#64B5F6", "#BA68C8", "#F06292", "#A1887F", "#90A4AE", "#AED581", "#FFFFFF"
-    ];
-    const npcColor = npcColors[Math.floor(Math.random() * npcColors.length)];
+      '#FFB300',
+      '#FF7043',
+      '#FF8A65',
+      '#FFD54F',
+      '#81C784',
+      '#4FC3F7',
+      '#64B5F6',
+      '#BA68C8',
+      '#F06292',
+      '#A1887F',
+      '#90A4AE',
+      '#AED581',
+      '#FFFFFF',
+    ]
+    const npcColor = npcColors[Math.floor(Math.random() * npcColors.length)]
     createNpcBody(this.world, npcId, npcPos.x, npcPos.y, npcSize)
 
     const npc = new Npc()
@@ -102,7 +114,6 @@ export class MatterRoom extends Room<State> {
     this.onMessage('get_debug_bodies', this.handleGetDebugBodies.bind(this))
     this.onMessage('shoot_bullet', this.handleShootBullet.bind(this))
 
-
     //====================================
     this.setSimulationInterval((deltaTime) => {
       Matter.Engine.update(this.engine, deltaTime)
@@ -120,33 +131,51 @@ export class MatterRoom extends Room<State> {
           player.y = defoldPos.y
         }
       })
+
       if (this.debugPhysics) {
         // this.updateDebugBodies()
       }
 
       // 총알 위치 동기화 및 삭제
       for (const [bulletId, bullet] of this.state.bullets.entries()) {
-        const body = this.world.bodies.find(b => b.label === bulletId);
+        const body = this.world.bodies.find((b) => b.label === bulletId)
         if (body) {
           // 위치 동기화
-          const defoldPos = matterToDefold(body.position);
-          bullet.x = defoldPos.x;
-          bullet.y = defoldPos.y;
+          const defoldPos = matterToDefold(body.position)
+          bullet.x = defoldPos.x
+          bullet.y = defoldPos.y
 
           // 예시: 화면 밖이면 삭제
           if (
-            bullet.x < -100 || bullet.x > 2100 ||
-            bullet.y < -100 || bullet.y > 2100
+            bullet.x < -100 ||
+            bullet.x > 2100 ||
+            bullet.y < -100 ||
+            bullet.y > 2100
           ) {
-            this.state.bullets.delete(bulletId);            
-            Matter.World.remove(this.world, body);
+            this.removeBullet(bulletId)
           }
         } else {
           // 바디가 없으면 state에서도 삭제
-          this.state.bullets.delete(bulletId);
+          this.state.bullets.delete(bulletId)
         }
       }
     }, 1000 / 60)
+
+    // 충돌 이벤트 리스너 등록
+    Matter.Events.on(this.engine, 'collisionStart', (event) => {
+      for (const pair of event.pairs) {
+        const labelA = pair.bodyA.label
+        const labelB = pair.bodyB.label
+
+        // bullet과 다른 오브젝트가 충돌했는지 확인
+        if (this.state.bullets.has(labelA)) {
+          this.removeBullet(labelA)
+        }
+        if (this.state.bullets.has(labelB)) {
+          this.removeBullet(labelB)
+        }
+      }
+    })
   }
 
   private handleMove(client: Client, data: any) {
@@ -212,72 +241,73 @@ export class MatterRoom extends Room<State> {
 
   private handleShootBullet(client: Client, data: any) {
     // data: { type, x, y, dirx, diry, power, velocity }
-    const bulletId = `bullet_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
-    const { type, x, y, dirx, diry, power, velocity } = data;
+    const bulletId = `bullet_${Date.now()}_${Math.floor(Math.random() * 10000)}`
+    const { type, x, y, dirx, diry, power, velocity } = data
 
     // Matter.js 바디 생성
-    const radius = 5; // 예시: 총알 반지름
+    const radius = 5 // 예시: 총알 반지름
     const bulletBody = Matter.Bodies.circle(x, SCREEN_HEIGHT - y, radius, {
       label: bulletId,
       isSensor: true, // 충돌만 감지, 물리 반응 없음
       frictionAir: 0,
-    });
+    })
     // 방향 단위 벡터로 속도 적용
     Matter.Body.setVelocity(bulletBody, {
       x: dirx * velocity,
       y: diry * velocity * -1,
-    });
-    Matter.World.add(this.world, bulletBody);
+    })
+    Matter.World.add(this.world, bulletBody)
 
     // State에 등록
-    // const bullet = new Bullet();
-    // bullet.id = bulletId;
-    // bullet.type = type;
-    // bullet.x = x;
-    // bullet.y = SCREEN_HEIGHT - y;
-    // bullet.dirx = dirx;
-    // bullet.diry = diry * -1;
-    // bullet.power = power;
-    // bullet.velocity = velocity;
-    // bullet.owner_id = client.sessionId;
-    // this.state.bullets.set(bulletId, bullet);
+    const bullet = new Bullet()
+    bullet.id = bulletId
+    bullet.type = type
+    bullet.x = x
+    bullet.y = SCREEN_HEIGHT - y
+    bullet.dirx = dirx
+    bullet.diry = diry * -1
+    bullet.power = power
+    bullet.velocity = velocity
+    bullet.owner_id = client.sessionId
+    // bullet.body = bulletBody;
+    this.state.bullets.set(bulletId, bullet)
   }
 
-  // 디버그용 물리 바디 정보 업데이트
-  private updateDebugBodies() {
-    // 첫 번째 실행인지 확인 (debugBodies가 비어있으면 모든 바디 추가)
-    // if (this.state.debugBodies.length === 0) {
-      // 처음에만 모든 바디 추가
+  // // 디버그용 물리 바디 정보 업데이트
+  // private updateDebugBodies() {
+  //   // 첫 번째 실행인지 확인 (debugBodies가 비어있으면 모든 바디 추가)
+  //   // if (this.state.debugBodies.length === 0) {
+  //     // 처음에만 모든 바디 추가
 
-      this.state.debugBodies.clear()
-      
-      this.world.bodies.forEach((body) => {
-        const debugBody = new PhysicsBody()
-        debugBody.label = body.label
+  //     // this.state.debugBodies.clear()
 
-        // Defold 좌표계로 변환
-        const defoldPos = matterToDefold(body.position)
-        debugBody.x = defoldPos.x
-        debugBody.y = defoldPos.y
+  //     this.world.bodies.forEach((body) => {
+  //       const debugBody = new PhysicsBody()
+  //       debugBody.label = body.label
 
-        // 바디 타입 및 크기 정보
-        if (body.circleRadius) {
-          debugBody.shape = 'circle'
-          debugBody.radius = body.circleRadius
-        } else {
-          debugBody.shape = 'rectangle'
-          // 바운딩 박스 크기 계산
-          const bounds = body.bounds
-          debugBody.width = bounds.max.x - bounds.min.x
-          debugBody.height = bounds.max.y - bounds.min.y
-        }
+  //       // Defold 좌표계로 변환
+  //       const defoldPos = matterToDefold(body.position)
+  //       debugBody.x = defoldPos.x
+  //       debugBody.y = defoldPos.y
 
-        debugBody.isStatic = body.isStatic
+  //       // 바디 타입 및 크기 정보
+  //       if (body.circleRadius) {
+  //         debugBody.shape = 'circle'
+  //         debugBody.radius = body.circleRadius
+  //       } else {
+  //         debugBody.shape = 'rectangle'
+  //         // 바운딩 박스 크기 계산
+  //         const bounds = body.bounds
+  //         debugBody.width = bounds.max.x - bounds.min.x
+  //         debugBody.height = bounds.max.y - bounds.min.y
+  //       }
 
-        // 상태에 추가
-        this.state.debugBodies.push(debugBody)
-      })
-  }
+  //       debugBody.isStatic = body.isStatic
+
+  //       // 상태에 추가
+  //       // this.state.debugBodies.push(debugBody)
+  //     })
+  // }
 
   onJoin(
     client: Client,
@@ -325,6 +355,34 @@ export class MatterRoom extends Room<State> {
     if (this.state.players.size === 0) {
       console.log('모든 플레이어가 나가서 방을 삭제합니다.')
       this.disconnect() // Colyseus Room의 dispose()를 호출하여 방 삭제
+    }
+  }
+
+  private removeBullet(bulletId: string) {
+    const bullet = this.state.bullets.get(bulletId)
+    if (bullet) {
+      const body = this.world.bodies.find((b) => b.label === bulletId)
+      let x = bullet.x
+      let y = bullet.y
+      if (body) {
+        // 최신 위치로 갱신
+        const defoldPos = matterToDefold(body.position)
+        x = defoldPos.x
+        y = defoldPos.y
+        try {
+          Matter.World.remove(this.world, body)
+        } catch (e) {
+          // 이미 삭제된 경우 무시
+        }
+      }
+      this.clients.forEach((client) => {
+        client.send('bullet_removed', {
+          id: bulletId,
+          x,
+          y,
+        })
+      })
+      this.state.bullets.delete(bulletId)
     }
   }
 }

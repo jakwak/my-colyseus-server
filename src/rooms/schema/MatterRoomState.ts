@@ -1,16 +1,16 @@
 import { Schema, type, MapSchema, ArraySchema } from "@colyseus/schema";
 
 // 물리 바디 정보를 담을 클래스
-export class PhysicsBody extends Schema {
-  @type("string") label: string = "";
-  @type("number") x: number = 0;
-  @type("number") y: number = 0;
-  @type("number") width: number = 0;
-  @type("number") height: number = 0;
-  @type("number") radius: number = 0;
-  @type("string") shape: string = "rectangle"; // "rectangle" 또는 "circle"
-  @type("boolean") isStatic: boolean = false;
-}
+// export class PhysicsBody extends Schema {
+//   @type("string") label: string = "";
+//   @type("number") x: number = 0;
+//   @type("number") y: number = 0;
+//   @type("number") width: number = 0;
+//   @type("number") height: number = 0;
+//   @type("number") radius: number = 0;
+//   @type("string") shape: string = "rectangle"; // "rectangle" 또는 "circle"
+//   @type("boolean") isStatic: boolean = false;
+// }
 
 export class Player extends Schema {
   @type("number") x: number = 0;
@@ -46,7 +46,7 @@ export class Bullet extends Schema {
 
 export class State extends Schema {
   @type({ map: Player }) players = new MapSchema<Player>();
-  @type([PhysicsBody]) debugBodies = new ArraySchema<PhysicsBody>();
+  // @type([PhysicsBody]) debugBodies = new ArraySchema<PhysicsBody>();
   @type({ map: Npc }) npcs = new MapSchema<Npc>();
   @type({ map: Bullet }) bullets = new MapSchema<Bullet>();
 
