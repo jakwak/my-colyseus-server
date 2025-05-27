@@ -23,10 +23,10 @@ export function createEngineAndWorld() {
 
 export function addWalls(world: Matter.World) {
   const walls = [
-    Matter.Bodies.rectangle(SCREEN_WIDTH/2, WALL_THICKNESS/2, SCREEN_WIDTH, WALL_THICKNESS, { isStatic: true, label: "wall" }),
-    Matter.Bodies.rectangle(SCREEN_WIDTH/2, SCREEN_HEIGHT - WALL_THICKNESS/2, SCREEN_WIDTH, WALL_THICKNESS, { isStatic: true, label: "wall" }),
-    Matter.Bodies.rectangle(WALL_THICKNESS/2, SCREEN_HEIGHT/2, WALL_THICKNESS, SCREEN_HEIGHT, { isStatic: true, label: "wall" }),
-    Matter.Bodies.rectangle(SCREEN_WIDTH - WALL_THICKNESS/2, SCREEN_HEIGHT/2, WALL_THICKNESS, SCREEN_HEIGHT, { isStatic: true, label: "wall" }),
+    Matter.Bodies.rectangle(SCREEN_WIDTH/2, WALL_THICKNESS/2, SCREEN_WIDTH, WALL_THICKNESS, { isStatic: true, label: "wall_1" }),
+    Matter.Bodies.rectangle(SCREEN_WIDTH/2, SCREEN_HEIGHT - WALL_THICKNESS/2, SCREEN_WIDTH, WALL_THICKNESS, { isStatic: true, label: "wall_2" }),
+    Matter.Bodies.rectangle(WALL_THICKNESS/2, SCREEN_HEIGHT/2, WALL_THICKNESS, SCREEN_HEIGHT, { isStatic: true, label: "wall_3" }),
+    Matter.Bodies.rectangle(SCREEN_WIDTH - WALL_THICKNESS/2, SCREEN_HEIGHT/2, WALL_THICKNESS, SCREEN_HEIGHT, { isStatic: true, label: "wall_4" }),
     // Matter.Bodies.rectangle(499, SCREEN_HEIGHT - 171, 960 * 0.2, WALL_THICKNESS, { isStatic: true, label: "pad" })
   ];
   Matter.World.add(world, walls);
@@ -97,7 +97,7 @@ export function createPlayer(world: Matter.World, id: string, startPos?: { x: nu
 export function moveBody(body: Matter.Body, direction: { x: number; y: number }) {
   Matter.Body.setVelocity(body, { 
     x: direction.x * 10, 
-    y: direction.y * 10
+    y: direction.y * 10 * -1
   });
 }
 
