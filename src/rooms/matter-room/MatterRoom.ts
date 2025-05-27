@@ -130,35 +130,23 @@ export class MatterRoom extends Room<State> {
           player.x = defoldPos.x
           player.y = defoldPos.y
         }
-      })
-
-      if (this.debugPhysics) {
-        // this.updateDebugBodies()
-      }
-
-      // 총알 위치 동기화 및 삭제
-      for (const [bulletId, bullet] of this.state.bullets.entries()) {
-        const body = this.world.bodies.find((b) => b.label === bulletId)
-        if (body) {
-          // 위치 동기화
+        const bullet = this.state.bullets.get(body.label)
+        if (bullet) {
           const defoldPos = matterToDefold(body.position)
           bullet.x = defoldPos.x
           bullet.y = defoldPos.y
 
           // 예시: 화면 밖이면 삭제
-          if (
-            bullet.x < -100 ||
-            bullet.x > 2100 ||
-            bullet.y < -100 ||
-            bullet.y > 2100
-          ) {
-            this.removeBullet(bulletId)
-          }
-        } else {
-          // 바디가 없으면 state에서도 삭제
-          this.state.bullets.delete(bulletId)
+          // if (
+          //   bullet.x < -100 ||
+          //   bullet.x > 2100 ||
+          //   bullet.y < -100 ||
+          //   bullet.y > 2100
+          // ) {
+          //   this.removeBullet(body.label)
+          // }
         }
-      }
+      })
     }, 1000 / 60)
 
     // 충돌 이벤트 리스너 등록
@@ -170,12 +158,12 @@ export class MatterRoom extends Room<State> {
         // bullet과 다른 오브젝트가 충돌했는지 확인
         if (this.state.bullets.has(labelA)) {
           this.removeBullet(labelA)
-        }
-        if (this.state.bullets.has(labelB)) {
+        } else if (this.state.bullets.has(labelB)) {
           this.removeBullet(labelB)
         }
       }
     })
+
   }
 
   private handleMove(client: Client, data: any) {
@@ -269,45 +257,9 @@ export class MatterRoom extends Room<State> {
     bullet.power = power
     bullet.velocity = velocity
     bullet.owner_id = client.sessionId
-    // bullet.body = bulletBody;
+
     this.state.bullets.set(bulletId, bullet)
   }
-
-  // // 디버그용 물리 바디 정보 업데이트
-  // private updateDebugBodies() {
-  //   // 첫 번째 실행인지 확인 (debugBodies가 비어있으면 모든 바디 추가)
-  //   // if (this.state.debugBodies.length === 0) {
-  //     // 처음에만 모든 바디 추가
-
-  //     // this.state.debugBodies.clear()
-
-  //     this.world.bodies.forEach((body) => {
-  //       const debugBody = new PhysicsBody()
-  //       debugBody.label = body.label
-
-  //       // Defold 좌표계로 변환
-  //       const defoldPos = matterToDefold(body.position)
-  //       debugBody.x = defoldPos.x
-  //       debugBody.y = defoldPos.y
-
-  //       // 바디 타입 및 크기 정보
-  //       if (body.circleRadius) {
-  //         debugBody.shape = 'circle'
-  //         debugBody.radius = body.circleRadius
-  //       } else {
-  //         debugBody.shape = 'rectangle'
-  //         // 바운딩 박스 크기 계산
-  //         const bounds = body.bounds
-  //         debugBody.width = bounds.max.x - bounds.min.x
-  //         debugBody.height = bounds.max.y - bounds.min.y
-  //       }
-
-  //       debugBody.isStatic = body.isStatic
-
-  //       // 상태에 추가
-  //       // this.state.debugBodies.push(debugBody)
-  //     })
-  // }
 
   onJoin(
     client: Client,
@@ -364,6 +316,7 @@ export class MatterRoom extends Room<State> {
       const body = this.world.bodies.find((b) => b.label === bulletId)
       let x = bullet.x
       let y = bullet.y
+      
       if (body) {
         // 최신 위치로 갱신
         const defoldPos = matterToDefold(body.position)
@@ -375,13 +328,6 @@ export class MatterRoom extends Room<State> {
           // 이미 삭제된 경우 무시
         }
       }
-      this.clients.forEach((client) => {
-        client.send('bullet_removed', {
-          id: bulletId,
-          x,
-          y,
-        })
-      })
       this.state.bullets.delete(bulletId)
     }
   }
