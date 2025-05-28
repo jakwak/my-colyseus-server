@@ -36,7 +36,6 @@ export class Bullet extends Schema {
 
 export class State extends Schema {
   @type({ map: Player }) players = new MapSchema<Player>();
-  // @type([PhysicsBody]) debugBodies = new ArraySchema<PhysicsBody>();
   @type({ map: Npc }) npcs = new MapSchema<Npc>();
   @type({ map: Bullet }) bullets = new MapSchema<Bullet>();
 
