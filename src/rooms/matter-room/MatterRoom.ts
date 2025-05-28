@@ -40,6 +40,9 @@ export class MatterRoom extends Room<State> {
     this.onMessage('shoot_bullet', this.handleShootBullet.bind(this))
 
     //====================================
+    // 물리 업데이트 주기 설정
+    this.engine.timing.timeScale = 1.0
+    
     this.setSimulationInterval((deltaTime) => {
       Matter.Engine.update(this.engine, deltaTime)
 
