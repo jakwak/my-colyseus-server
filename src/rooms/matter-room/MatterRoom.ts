@@ -137,14 +137,14 @@ export class MatterRoom extends Room<State> {
           bullet.y = defoldPos.y
 
           // 예시: 화면 밖이면 삭제
-          // if (
-          //   bullet.x < -100 ||
-          //   bullet.x > 2100 ||
-          //   bullet.y < -100 ||
-          //   bullet.y > 2100
-          // ) {
-          //   this.removeBullet(body.label)
-          // }
+          if (
+            bullet.x < -100 ||
+            bullet.x > 2100 ||
+            bullet.y < -100 ||
+            bullet.y > 2100
+          ) {
+            this.removeBullet(body.label)
+          }
         }
       })
     }, 1000 / 60)
@@ -157,13 +157,20 @@ export class MatterRoom extends Room<State> {
 
         // bullet과 다른 오브젝트가 충돌했는지 확인
         if (this.state.bullets.has(labelA)) {
-          this.removeBullet(labelA)
+          const bullet = this.state.bullets.get(labelA)
+          // 총알의 owner_id와 충돌한 바디의 label이 다를 때만 제거
+          if (bullet && bullet.owner_id !== labelB) {
+            this.removeBullet(labelA)
+          }
         } else if (this.state.bullets.has(labelB)) {
-          this.removeBullet(labelB)
+          const bullet = this.state.bullets.get(labelB)
+          // 총알의 owner_id와 충돌한 바디의 label이 다를 때만 제거
+          if (bullet && bullet.owner_id !== labelA) {
+            this.removeBullet(labelB)
+          }
         }
       }
     })
-
   }
 
   private handleMove(client: Client, data: any) {
@@ -175,6 +182,8 @@ export class MatterRoom extends Room<State> {
         const defoldPos = matterToDefold(body.position)
         player.x = defoldPos.x
         player.y = defoldPos.y
+        player.dirx = data.x
+        player.diry = data.y
       }
     }
   }
@@ -314,14 +323,14 @@ export class MatterRoom extends Room<State> {
     const bullet = this.state.bullets.get(bulletId)
     if (bullet) {
       const body = this.world.bodies.find((b) => b.label === bulletId)
-      let x = bullet.x
-      let y = bullet.y
-      
+      // let x = bullet.x
+      // let y = bullet.y
+
       if (body) {
         // 최신 위치로 갱신
-        const defoldPos = matterToDefold(body.position)
-        x = defoldPos.x
-        y = defoldPos.y
+        // const defoldPos = matterToDefold(body.position)
+        // x = defoldPos.x
+        // y = defoldPos.y
         try {
           Matter.World.remove(this.world, body)
         } catch (e) {

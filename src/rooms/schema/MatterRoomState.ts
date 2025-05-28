@@ -3,6 +3,8 @@ import { Schema, type, MapSchema, ArraySchema } from "@colyseus/schema";
 export class Player extends Schema {
   @type("number") x: number = 0;
   @type("number") y: number = 0;
+  @type("number") dirx: number = 0;
+  @type("number") diry: number = 0;  
   @type("string") color: string = ""; // 밝은 톤의 랜덤색상 (겹치지 않게 할당)
   @type("string") username: string = "무명인"; // 기본값
 }
