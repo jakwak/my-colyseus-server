@@ -13,59 +13,14 @@ import {
   SCREEN_HEIGHT,
 } from './physics'
 import Matter from 'matter-js'
+import { NpcWanderManager } from './NpcWanderManager'
 
 export class MatterRoom extends Room<State> {
   // 디버그 모드 (true면 물리 바디 정보 전송)
   private debugPhysics: boolean = true
   private engine: Matter.Engine
   private world: Matter.World
-
-  // === 시험용 NPC 이동 ===
-  // waypoint 리스트를 화면 내 안전한 위치로 미리 정의
-  private npcWaypoints = [
-    defoldToMatter({ x: 100, y: 100 }),
-    defoldToMatter({ x: 650, y: 130 }),
-    defoldToMatter({ x: 860, y: 540 }),
-    defoldToMatter({ x: 100, y: 1540 }),
-    defoldToMatter({ x: 1480, y: 320 }),
-    defoldToMatter({ x: 300, y: 1200 }),
-    defoldToMatter({ x: 1700, y: 1400 }),
-  ]
-  private npcCurrentWaypointIdx = 0
-
-  private moveNpc(npcId: string, npcSize: number, deltaTime: number) {
-    const npcBody = this.world.bodies.find((b) => b.label === npcId)
-    if (!npcBody) return
-    const speed = 80 // 일정한 느린 속도
-    const waypoint = this.npcWaypoints[this.npcCurrentWaypointIdx]
-    // 방향 벡터 계산
-    const dx = waypoint.x - npcBody.position.x
-    const dy = waypoint.y - npcBody.position.y
-    const dist = Math.sqrt(dx * dx + dy * dy)
-    if (dist < 10) {
-      // waypoint에 도달하면 다음 waypoint로
-      this.npcCurrentWaypointIdx =
-        (this.npcCurrentWaypointIdx + 1) % this.npcWaypoints.length
-      return
-    }
-    // 단위 벡터로 이동
-    const dirX = dx / dist
-    const dirY = dy / dist
-    Matter.Body.setVelocity(npcBody, {
-      x: (dirX * speed) / 60,
-      y: (dirY * speed) / 60,
-    })
-    // Colyseus State 위치 동기화
-    const npcState = this.state.npcs.get(npcId)
-    if (npcState) {
-      const defoldPos = matterToDefold(npcBody.position)
-      npcState.x = defoldPos.x
-      npcState.y = defoldPos.y
-      npcState.dirx = dirX
-      npcState.diry = dirY
-    }
-  }
-  // === 시험용 NPC 이동 끝 ===
+  private npcWanderManager: NpcWanderManager | null = null;
 
   onCreate() {
     this.state = new State()
@@ -74,39 +29,9 @@ export class MatterRoom extends Room<State> {
     this.world = world
     addWalls(this.world)
 
-    // === 시험용 NPC 1개 생성 ===
-    const npcId = 'npc_1'
-    const npcSize = 20
-    const npcPos = { x: 200, y: 400 }
-    const npcColors = [
-      '#FFB300',
-      '#FF7043',
-      '#FF8A65',
-      '#FFD54F',
-      '#81C784',
-      '#4FC3F7',
-      '#64B5F6',
-      '#BA68C8',
-      '#F06292',
-      '#A1887F',
-      '#90A4AE',
-      '#AED581',
-      '#FFFFFF',
-    ]
-    const npcColor = npcColors[Math.floor(Math.random() * npcColors.length)]
-    createNpcBody(this.world, npcId, npcPos.x, npcPos.y, npcSize)
-
-    const npc = new Npc()
-    npc.id = npcId
-    npc.x = npcPos.x
-    npc.y = npcPos.y
-    npc.size = npcSize
-    npc.shape = 'circle'
-    npc.owner_id = 'server'
-    npc.power = 10
-    npc.color = npcColor
-    this.state.npcs.set(npcId, npc)
-    // === 시험용 NPC 생성 끝 ===
+    // === NPC 랜덤 이동 매니저 생성 및 NPC 3개 생성 ===
+    this.npcWanderManager = new NpcWanderManager(this.world, this.state.npcs)
+    this.npcWanderManager.spawnNpcs(3, 20)
 
     this.onMessage('move', this.handleMove.bind(this))
     this.onMessage('position_sync', this.handlePositionSync.bind(this))
@@ -118,9 +43,10 @@ export class MatterRoom extends Room<State> {
     this.setSimulationInterval((deltaTime) => {
       Matter.Engine.update(this.engine, deltaTime)
 
-      // === 시험용 NPC 이동 ===
-      this.moveNpc(npcId, npcSize, deltaTime)
-      // === NPC 이동 끝 ===
+      // === NPC 랜덤 이동 ===
+      if (this.npcWanderManager) {
+        this.npcWanderManager.moveAllNpcs(deltaTime)
+      }
 
       // 플레이어 상태 업데이트
       this.world.bodies.forEach((body) => {
@@ -209,6 +135,7 @@ export class MatterRoom extends Room<State> {
   }
 
   private handleGetDebugBodies(client: Client, data: any) {
+    if (!this.debugPhysics) return;
     const bodyDataList: Array<{
       label: string
       x: number
