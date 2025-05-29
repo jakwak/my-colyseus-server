@@ -14,13 +14,15 @@ import {
 } from './physics'
 import Matter from 'matter-js'
 import { NpcWanderManager } from './NpcWanderManager'
+import { NpcFollowerManager } from './NpcFollowerManager'
 
 export class MatterRoom extends Room<State> {
   // 디버그 모드 (true면 물리 바디 정보 전송)
   private debugPhysics: boolean = true
   private engine: Matter.Engine
   private world: Matter.World
-  private npcWanderManager: NpcWanderManager | null = null;
+  private npcWanderManager: NpcWanderManager | null = null
+  private npcFollowerManager: NpcFollowerManager | null = null
 
   onCreate() {
     this.state = new State()
@@ -31,7 +33,18 @@ export class MatterRoom extends Room<State> {
 
     // === NPC 랜덤 이동 매니저 생성 및 NPC 3개 생성 ===
     this.npcWanderManager = new NpcWanderManager(this.world, this.state.npcs)
-    this.npcWanderManager.spawnNpcs(3, 20)
+    this.npcWanderManager.spawnNpcs(1, 25)
+
+    const randomNpcId = this.npcWanderManager.getRandomNpcId();
+    if (randomNpcId) {
+        // randomNpcId를 사용하여 작업 수행
+        this.npcFollowerManager = new NpcFollowerManager(this.world, this.state.npcs, randomNpcId)
+        this.npcFollowerManager.formationAngle = Math.PI / 4; // 45도 각도
+        this.npcFollowerManager.speedMultiplier = 0.8; // 리더 속도의 80%
+        this.npcFollowerManager.baseDistance = 50; // 기본 거리
+        this.npcFollowerManager.formationSpacing = 50; // NPC 간 간격
+        this.npcFollowerManager.spawnFollowers(10, 20); // 10개의 팔로워 생성        
+    }
 
     this.onMessage('move', this.handleMove.bind(this))
     this.onMessage('position_sync', this.handlePositionSync.bind(this))
@@ -49,6 +62,10 @@ export class MatterRoom extends Room<State> {
       // === NPC 랜덤 이동 ===
       if (this.npcWanderManager) {
         this.npcWanderManager.moveAllNpcs(deltaTime)
+      }
+
+      if (this.npcFollowerManager) {
+        this.npcFollowerManager.moveAllFollowers(deltaTime)
       }
 
       // 플레이어 상태 업데이트
