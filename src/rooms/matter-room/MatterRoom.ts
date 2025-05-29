@@ -22,7 +22,6 @@ export class MatterRoom extends Room<State> {
   private engine: Matter.Engine
   private world: Matter.World
   private npcWanderManager: NpcWanderManager | null = null
-  private npcFollowerManager: NpcFollowerManager | null = null
 
   onCreate() {
     this.state = new State()
@@ -31,20 +30,17 @@ export class MatterRoom extends Room<State> {
     this.world = world
     addWalls(this.world)
 
-    // === NPC 랜덤 이동 매니저 생성 및 NPC 3개 생성 ===
-    this.npcWanderManager = new NpcWanderManager(this.world, this.state.npcs)
-    this.npcWanderManager.spawnNpcs(1, 25)
 
-    const randomNpcId = this.npcWanderManager.getRandomNpcId();
-    if (randomNpcId) {
-        // randomNpcId를 사용하여 작업 수행
-        this.npcFollowerManager = new NpcFollowerManager(this.world, this.state.npcs, randomNpcId)
-        this.npcFollowerManager.formationAngle = Math.PI / 4; // 45도 각도
-        this.npcFollowerManager.speedMultiplier = 0.8; // 리더 속도의 80%
-        this.npcFollowerManager.baseDistance = 50; // 기본 거리
-        this.npcFollowerManager.formationSpacing = 50; // NPC 간 간격
-        this.npcFollowerManager.spawnFollowers(10, 20); // 10개의 팔로워 생성        
-    }
+    // 예시: wander NPC 3개, 각 NPC마다 팔로워 6개(size 10)씩 생성
+    this.npcWanderManager = new NpcWanderManager(this.world, this.state.npcs);
+
+    // 팔로워 매니저는 내부적으로 자동 생성/관리됨
+    this.npcWanderManager.spawnNpcs(
+      5,    // wander NPC 개수
+      25,   // wander NPC 크기
+      10,    // 각 wander NPC마다 팔로워 개수
+      10    // 팔로워 크기
+    );
 
     this.onMessage('move', this.handleMove.bind(this))
     this.onMessage('position_sync', this.handlePositionSync.bind(this))
@@ -58,14 +54,11 @@ export class MatterRoom extends Room<State> {
     
     this.setSimulationInterval((deltaTime) => {
       Matter.Engine.update(this.engine, deltaTime)
-
       // === NPC 랜덤 이동 ===
       if (this.npcWanderManager) {
+        // tick마다 wander/follower 현황 출력 (간략)
+        //console.log(`[ROOM] tick: wanderCount=${this.npcWanderManager.myNpcIds ? this.npcWanderManager.myNpcIds.size : 'N/A'}, followerManagers=${this.npcWanderManager.followerManagers.length}`);
         this.npcWanderManager.moveAllNpcs(deltaTime)
-      }
-
-      if (this.npcFollowerManager) {
-        this.npcFollowerManager.moveAllFollowers(deltaTime)
       }
 
       // 플레이어 상태 업데이트

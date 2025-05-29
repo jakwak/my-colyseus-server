@@ -10,6 +10,12 @@ declare module "matter-js" {
   }
 }
 
+// 카테고리 비트마스크 정의
+export const CATEGORY_PLAYER = 0x0001;
+export const CATEGORY_WALL   = 0x0002;
+export const CATEGORY_BULLET = 0x0004;
+export const CATEGORY_NPC    = 0x0008;
+
 // 화면 크기 설정
 export const WALL_THICKNESS = 20;
 export const SCREEN_WIDTH = 2000;
@@ -23,10 +29,10 @@ export function createEngineAndWorld() {
 
 export function addWalls(world: Matter.World) {
   const walls = [
-    Matter.Bodies.rectangle(SCREEN_WIDTH/2, WALL_THICKNESS/2, SCREEN_WIDTH, WALL_THICKNESS, { isStatic: true, label: "wall_1  " }),
-    Matter.Bodies.rectangle(SCREEN_WIDTH/2, SCREEN_HEIGHT - WALL_THICKNESS/2, SCREEN_WIDTH, WALL_THICKNESS, { isStatic: true, label: "wall_2" }),
-    Matter.Bodies.rectangle(WALL_THICKNESS/2, SCREEN_HEIGHT/2, WALL_THICKNESS, SCREEN_HEIGHT, { isStatic: true, label: "wall_3" }),
-    Matter.Bodies.rectangle(SCREEN_WIDTH - WALL_THICKNESS/2, SCREEN_HEIGHT/2, WALL_THICKNESS, SCREEN_HEIGHT, { isStatic: true, label: "wall_4" }),
+    createWallBody(SCREEN_WIDTH/2, WALL_THICKNESS/2, SCREEN_WIDTH, WALL_THICKNESS, "wall_1"),
+    createWallBody(SCREEN_WIDTH/2, SCREEN_HEIGHT - WALL_THICKNESS/2, SCREEN_WIDTH, WALL_THICKNESS, "wall_2"),
+    createWallBody(WALL_THICKNESS/2, SCREEN_HEIGHT/2, WALL_THICKNESS, SCREEN_HEIGHT, "wall_3"),
+    createWallBody(SCREEN_WIDTH - WALL_THICKNESS/2, SCREEN_HEIGHT/2, WALL_THICKNESS, SCREEN_HEIGHT, "wall_4"),
     // Matter.Bodies.rectangle(499, SCREEN_HEIGHT - 171, 960 * 0.2, WALL_THICKNESS, { isStatic: true, label: "pad" })
   ];
   Matter.World.add(world, walls);
@@ -40,30 +46,15 @@ export function createNpcBody(world: Matter.World, id: string, x: number, y: num
     restitution: 1.5,
     friction: 0.01,
     frictionAir: 0.01,
+    collisionFilter: {
+      category: CATEGORY_NPC,
+      mask: CATEGORY_PLAYER | CATEGORY_WALL | CATEGORY_BULLET // NPC는 플레이어, 벽, 총알과만 충돌
+    }
   });
   Matter.World.add(world, body);
   return body;
 }
 
-// 좌표 변환 함수
-export function defoldToMatter(pos: { x: number; y: number }) {
-  return {
-    x: pos.x,
-    y: SCREEN_HEIGHT - pos.y  // y축 반전
-  };
-}
-
-export function matterToDefold(pos: { x: number; y: number }) {
-  return {
-    x: pos.x,
-    y: SCREEN_HEIGHT - pos.y  // y축 반전
-  };
-}
-
-// 중력 설정 (y축 방향)
-// engine.gravity.y = 0;
-
-// 플레이어 생성 (위치 파라미터 추가)
 export function createPlayer(world: Matter.World, id: string, startPos?: { x: number; y: number }) {
   // 디폴트 위치: 화면 가운데 위쪽
   const defoldPos = startPos || {
@@ -83,7 +74,11 @@ export function createPlayer(world: Matter.World, id: string, startPos?: { x: nu
       frictionAir: 0.1,  // 공기 저항
       inertia: Infinity,  // 회전 방지
       inverseInertia: 0,  // 회전 방지
-      slop: 0  // 미세한 관통 허용치 (0으로 설정하여 정확한 충돌 처리)
+      slop: 0,  // 미세한 관통 허용치 (0으로 설정하여 정확한 충돌 처리)
+      collisionFilter: {
+        category: CATEGORY_PLAYER,
+        mask: CATEGORY_WALL | CATEGORY_BULLET | CATEGORY_NPC // 플레이어는 벽, 총알, NPC와만 충돌
+      }
     }
   );
   
@@ -92,6 +87,47 @@ export function createPlayer(world: Matter.World, id: string, startPos?: { x: nu
   Matter.World.add(world, body);
   return body;
 }
+
+export function createBulletBody(x: number, y: number, radius: number, label: string) {
+  return Matter.Bodies.circle(x, y, radius, {
+    label,
+    isSensor: true,
+    frictionAir: 0,
+    collisionFilter: {
+      category: CATEGORY_BULLET,
+      mask: CATEGORY_PLAYER | CATEGORY_WALL | CATEGORY_NPC // 총알은 플레이어, 벽, NPC와만 충돌
+    }
+  });
+}
+
+export function createWallBody(x: number, y: number, width: number, height: number, label: string) {
+  return Matter.Bodies.rectangle(x, y, width, height, {
+    isStatic: true,
+    label,
+    collisionFilter: {
+      category: CATEGORY_WALL,
+      mask: CATEGORY_PLAYER | CATEGORY_BULLET | CATEGORY_NPC // 벽은 플레이어, 총알, NPC와만 충돌
+    }
+  });
+}
+
+// 좌표 변환 함수
+export function defoldToMatter(pos: { x: number; y: number }) {
+  return {
+    x: pos.x,
+    y: SCREEN_HEIGHT - pos.y  // y축 반전
+  };
+}
+
+export function matterToDefold(pos: { x: number; y: number }) {
+  return {
+    x: pos.x,
+    y: SCREEN_HEIGHT - pos.y  // y축 반전
+  };
+}
+
+// 중력 설정 (y축 방향)
+// engine.gravity.y = 0;
 
 // 이동 처리
 export function moveBody(body: Matter.Body, direction: { x: number; y: number }) {

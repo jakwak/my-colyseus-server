@@ -1,14 +1,16 @@
 import Matter from 'matter-js'
-import { matterToDefold } from './physics'
+import { matterToDefold, createNpcBody, CATEGORY_NPC, SCREEN_WIDTH, SCREEN_HEIGHT } from './physics'
 import { Npc } from '../schema/MatterRoomState'
 import { MapSchema } from '@colyseus/schema'
+import { NpcFollowerManager } from './NpcFollowerManager'
 
-const MIN_X = 100;
-const MAX_X = 1900;
-const MIN_Y = 100;
-const MAX_Y = 1900;
+const MARGIN = 40;
+const MIN_X = MARGIN;
+const MAX_X = SCREEN_WIDTH - MARGIN;
+const MIN_Y = MARGIN;
+const MAX_Y = SCREEN_HEIGHT - MARGIN;
 const NPC_MOVE_RADIUS = 1500;
-const NPC_SPEED = 80;
+const NPC_SPEED = 50;
 
 export class NpcWanderManager {
   private world: Matter.World
@@ -16,6 +18,7 @@ export class NpcWanderManager {
   private npcTargets: Map<string, { x: number; y: number }> // 각 NPC별 목표 지점
   private npcDirs: Map<string, { x: number; y: number }> // 각 NPC별 현재 방향
   private myNpcIds: Set<string> = new Set() // 이 매니저가 생성한 NPC ID들
+  public followerManagers: NpcFollowerManager[] = [] // 각 그룹별 팔로워 매니저
 
   constructor(world: Matter.World, stateNpcs: MapSchema<Npc>) {
     this.world = world
@@ -31,16 +34,13 @@ export class NpcWanderManager {
     return npcIds[Math.floor(Math.random() * npcIds.length)]
   }
 
-  // NPC 여러 개 생성
-  public spawnNpcs(count: number, size: number) {
+  // 여러 그룹을 독립적으로 관리 (각 wander NPC마다 별도의 followerManager)
+  public spawnNpcs(count: number, size: number, followerCount?: number, followerSize?: number) {
     for (let i = 0; i < count; i++) {
       const id = `npc_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
       const x = Math.random() * (MAX_X - MIN_X) + MIN_X
       const y = Math.random() * (MAX_Y - MIN_Y) + MIN_Y
-      const npcBody = Matter.Bodies.circle(x, y, size / 2, {
-        label: id,
-        isStatic: false,
-      })
+      const npcBody = createNpcBody(this.world, id, x, y, size / 2)
       Matter.World.add(this.world, npcBody);
       const npc = new Npc();
       npc.id = id;
@@ -56,6 +56,14 @@ export class NpcWanderManager {
       // 최초 방향은 임의로 (1,0) 전방
       this.npcDirs.set(id, { x: 1, y: 0 });
       this.npcTargets.set(id, this.getRandomTargetNear(x, y, NPC_MOVE_RADIUS, { x: 1, y: 0 }));
+      // console.log(`[WANDER] NPC 생성: id=${id}, x=${x}, y=${y}`);
+      // 각 wander NPC마다 별도의 followerManager 생성
+      if (followerCount && followerSize) {
+        const followerManager = new NpcFollowerManager(this.world, this.stateNpcs, id);
+        followerManager.spawnFollowers(followerCount, followerSize);
+        this.followerManagers.push(followerManager);
+        // console.log(`[WANDER] FollowerManager 생성: leaderId=${id}, followerCount=${followerCount}`);
+      }
     }
   }
 
@@ -100,6 +108,7 @@ export class NpcWanderManager {
         this.npcDirs.set(id, curDir);
         target = this.getRandomTargetNear(npcBody.position.x, npcBody.position.y, NPC_MOVE_RADIUS, curDir);
         this.npcTargets.set(id, target);
+        // console.log(`[WANDER] NPC 목표 갱신: id=${id}, newTarget=(${target.x},${target.y})`);
         continue;
       }
       const dirX = dx / dist;
@@ -116,43 +125,14 @@ export class NpcWanderManager {
       npc.diry = dirY;
       // 현재 방향 갱신
       this.npcDirs.set(id, { x: dirX, y: dirY });
+      // 디버깅: NPC 이동 로그
+      //console.log(`[WANDER] NPC 이동: id=${id}, pos=(${npc.x},${npc.y}), target=(${target.x},${target.y}), dir=(${dirX},${dirY})`);
     }
-  }
-
-  private moveTowardsTarget(npc: Npc, body: Matter.Body, target: Matter.Vector, deltaTime: number) {
-    const currentPos = body.position
-    const dx = target.x - currentPos.x
-    const dy = target.y - currentPos.y
-    const distanceToTarget = Math.sqrt(dx * dx + dy * dy)
-
-    // 목표 지점이 너무 가까우면 새로운 목표 지점 설정
-    if (distanceToTarget < 1000) {
-      const angle = Math.random() * Math.PI * 2
-      const distance = 1000 + Math.random() * 500 // 1000~1500 사이의 거리
-      target.x = currentPos.x + Math.cos(angle) * distance
-      target.y = currentPos.y + Math.sin(angle) * distance
-      return
+    // 각 그룹별 팔로워 이동
+    for (const fm of this.followerManagers) {
+      // 디버깅: 팔로워 매니저별 리더 ID 및 팔로워 수
+      // console.log(`[WANDER] FollowerManager move: leaderId=${fm.leaderId}, followerCount=${fm.getFollowerCount ? fm.getFollowerCount() : 'N/A'}`);
+      fm.moveAllFollowers(deltaTime);
     }
-
-    // 목표 지점으로 이동
-    const angle = Math.atan2(dy, dx)
-    const force = Math.min(distanceToTarget * 0.1, 10) // 최대 힘 제한
-
-    Matter.Body.setVelocity(body, {
-      x: Math.cos(angle) * force,
-      y: Math.sin(angle) * force,
-    })
-
-    // 위치 업데이트
-    const defoldPos = matterToDefold(body.position)
-    npc.x = defoldPos.x
-    npc.y = defoldPos.y
-
-    // 방향 업데이트
-    const dirX = dx / distanceToTarget
-    const dirY = dy / distanceToTarget
-    npc.dirx = dirX
-    npc.diry = dirY
-    this.npcDirs.set(npc.id, { x: dirX, y: dirY })
   }
 }
