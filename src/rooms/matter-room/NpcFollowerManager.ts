@@ -18,7 +18,7 @@ export class NpcFollowerManager {
   // 직접 수정 가능한 속성들
   formationAngle: number = Math.PI / 4 // 45도 각도 (0 ~ π/2)
   baseDistance: number = 50 // 기본 간격 (50 ~ 300)
-  speedMultiplier: number = 0.8 // 리더 대비 속도 비율 (0.1 ~ 2.0)
+  speedMultiplier: number = 0.5 // 리더 대비 속도 비율 (0.1 ~ 2.0)
   formationSpacing: number = 50 // V자형 내 NPC 간 간격 (20 ~ 200)
 
   constructor(world: Matter.World, npcs: MapSchema<Npc>, leaderId: string) {
@@ -62,6 +62,18 @@ export class NpcFollowerManager {
       const yR = leaderPos.y + Math.sin(angleR) * distanceR
       this.createFollower(xR, yR, size, `${this.leaderId}_follower_right_${i}`)
     }
+    // count가 홀수면 남은 1개는 리더 바로 뒤에 일자형으로 배치
+    if (count % 2 === 1) {
+      // 리더 바로 뒤에 딱 붙이기: 일자 대형과 동일하게 처리
+      const leader = this.npcs.get(this.leaderId);
+      const leaderSize = leader ? leader.size : size;
+      const distanceC = (leaderSize / 2) + (size / 2) + 50;
+      // leaderAngle 계산 (일자형과 동일)
+      let angleC = leaderAngle + Math.PI;
+      const xC = leaderPos.x + Math.cos(angleC) * distanceC;
+      const yC = leaderPos.y + Math.sin(angleC) * distanceC;
+      this.createFollower(xC, yC, size, `${this.leaderId}_follower_center`);
+    }
     // console.log(`[FOLLOWER] 팔로워 생성 완료: leaderId=${this.leaderId}, count=${count}, myNpcIds=[${Array.from(this.myNpcIds).join(',')}]`);
   }
 
@@ -84,7 +96,7 @@ export class NpcFollowerManager {
     // console.log(`[FOLLOWER] 팔로워 생성: id=${id}, x=${x}, y=${y}`);
   }
 
-  moveAllFollowers(deltaTime: number) {
+  moveAllFollowers(deltaTime: number, mode: "v" | "line" | "escort" = "v") {
     const leader = this.npcs.get(this.leaderId)
     if (!leader) {
       // console.log(`[FOLLOWER] moveAllFollowers: 리더 NPC(state) 없음: leaderId=${this.leaderId}`);
@@ -107,31 +119,100 @@ export class NpcFollowerManager {
     const leaderAngle = Math.atan2(leaderDirY, leaderDirX)
 
     // 자신이 생성한 NPC만 이동
-    for (const id of this.myNpcIds) {
-      const npc = this.npcs.get(id)
-      if (!npc) {
-        // console.log(`[FOLLOWER] moveAllFollowers: 팔로워 NPC(state) 없음: id=${id}`);
-        continue
-      }
+    const followerIds = Array.from(this.myNpcIds);
+    // V자형일 때는 좌/우 그룹별로 index를 따로 부여
+    let leftIdx = 0, rightIdx = 0;
 
-      const followerBody = this.world.bodies.find((b) => b.label === id)
-      if (!followerBody) {
-        // console.log(`[FOLLOWER] moveAllFollowers: 팔로워 NPC(body) 없음: id=${id}`);
-        continue
+    // escort(박스) 대형용 offset 계산 함수
+    function getBoxEscortOffsets(count: number, boxDistance: number) {
+      const offsets: {x: number, y: number}[] = [];
+      const perSide = Math.floor(count / 4);
+      for (let side = 0; side < 4; side++) {
+        for (let j = 0; j < perSide; j++) {
+          const t = (j + 0.5) / perSide; // 0~1 등분 (꼭짓점과 중간 모두 분산)
+          let x = 0, y = 0;
+          if (side === 0) { // top
+            x = -boxDistance + t * 2 * boxDistance;
+            y = -boxDistance;
+          } else if (side === 1) { // right
+            x = boxDistance;
+            y = -boxDistance + t * 2 * boxDistance;
+          } else if (side === 2) { // bottom
+            x = boxDistance - t * 2 * boxDistance;
+            y = boxDistance;
+          } else if (side === 3) { // left
+            x = -boxDistance;
+            y = boxDistance - t * 2 * boxDistance;
+          }
+          offsets.push({x, y});
+        }
       }
+      return offsets;
+    }
 
-      const followerPos = followerBody.position
-      
-      // V자형에서의 상대적 위치 계산 (리더 뒤쪽으로)
-      const isLeftSide = id.includes('_follower_left_')
-      const formationAngle = isLeftSide ? this.formationAngle : -this.formationAngle
-      // index를 항상 follower_left_N, follower_right_N의 N으로 파싱
-      const indexMatch = id.match(/_(\d+)$/)
-      const index = indexMatch ? parseInt(indexMatch[1]) : 0
-      const targetDistance = this.baseDistance + (index * this.formationSpacing)
-      const targetAngle = leaderAngle + Math.PI + formationAngle // 리더 뒤쪽으로
-      const targetX = leaderPos.x + Math.cos(targetAngle) * targetDistance
-      const targetY = leaderPos.y + Math.sin(targetAngle) * targetDistance
+    for (let i = 0; i < followerIds.length; i++) {
+      const id = followerIds[i];
+      const npc = this.npcs.get(id);
+      if (!npc) continue;
+      const followerBody = this.world.bodies.find((b) => b.label === id);
+      if (!followerBody) continue;
+      const followerPos = followerBody.position;
+
+      let targetX, targetY, targetDistance;
+      if (mode === "escort") {
+        // 박스 대형: 4의 배수만 박스, 나머지는 뒤에 일렬
+        const perSide = Math.floor(followerIds.length / 4);
+        const boxCount = perSide * 4;
+        const boxDistance = this.baseDistance + this.formationSpacing * 0.8; // 0.8 이면 박스 대형
+        if (i < boxCount) {
+          // 박스 변에 균등 배치
+          const offsets = getBoxEscortOffsets(boxCount, boxDistance);
+          // 리더 진행방향에 맞춰 회전
+          const off = offsets[i];
+          const cosA = Math.cos(leaderAngle);
+          const sinA = Math.sin(leaderAngle);
+          const rx = off.x * cosA - off.y * sinA;
+          const ry = off.x * sinA + off.y * cosA;
+          targetX = leaderPos.x + rx;
+          targetY = leaderPos.y + ry;
+          targetDistance = Math.sqrt(rx*rx + ry*ry);
+        } else {
+          // 나머지는 리더 뒤 일렬
+          const lineIdx = i - boxCount;
+          targetDistance = boxDistance + (lineIdx + 1) * this.formationSpacing;
+          const targetAngle = leaderAngle + Math.PI;
+          targetX = leaderPos.x + Math.cos(targetAngle) * targetDistance;
+          targetY = leaderPos.y + Math.sin(targetAngle) * targetDistance;
+        }
+      }
+      else if (mode === "v" && id.includes('_follower_center')) {
+        // V자 대형이지만 center 팔로워는 항상 일자 대형처럼 리더 뒤로
+        targetDistance = this.baseDistance;
+        const targetAngle = leaderAngle + Math.PI;
+        targetX = leaderPos.x + Math.cos(targetAngle) * targetDistance;
+        targetY = leaderPos.y + Math.sin(targetAngle) * targetDistance;
+      } else if (mode === "v") {
+        // 기존 V자형
+        const isLeftSide = id.includes('_follower_left_');
+        const formationAngle = isLeftSide ? this.formationAngle : -this.formationAngle;
+        let index;
+        if (isLeftSide) {
+          index = leftIdx++;
+        } else {
+          index = rightIdx++;
+        }
+        targetDistance = this.baseDistance + (index * this.formationSpacing);
+        const targetAngle = leaderAngle + Math.PI + formationAngle;
+        targetX = leaderPos.x + Math.cos(targetAngle) * targetDistance;
+        targetY = leaderPos.y + Math.sin(targetAngle) * targetDistance;
+      } else {
+        // 일자형: 리더 뒤쪽으로 일렬 정렬
+        const index = i;
+        targetDistance = this.baseDistance + (index * this.formationSpacing);
+        const targetAngle = leaderAngle + Math.PI;
+        targetX = leaderPos.x + Math.cos(targetAngle) * targetDistance;
+        targetY = leaderPos.y + Math.sin(targetAngle) * targetDistance;
+      }
 
       // 벽에 부딪히지 않도록 안전 영역으로 보정
       const safeX = clamp(targetX, MARGIN, SCREEN_WIDTH - MARGIN);
@@ -154,10 +235,10 @@ export class NpcFollowerManager {
 
       // 속도 조절 (거리에 따라)
       const speed = leaderSpeed * this.speedMultiplier
-      // maxSpeed: 기본값과 오차 기반값 중 작은 값, 그리고 상한선(10) 적용
+      // maxSpeed: 기본값과 오차 기반값 중 작은 값, 그리고 상한선(2) 적용
       const maxSpeed = Math.min(
         Math.max(speed * 1.5, distErrorAbs * 0.5),
-        10 // 상한선
+        2 // 상한선
       )
 
       // 힘(속도) 계산: 오차가 작으면 힘도 작게, 아주 작으면 0

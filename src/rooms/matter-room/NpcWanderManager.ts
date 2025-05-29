@@ -73,7 +73,7 @@ export class NpcWanderManager {
     while (true) {
       // -90~+90도(전방 반원) 내 임의 각도
       const baseAngle = Math.atan2(dir.y, dir.x);
-      const offset = (Math.random() - 0.5) * Math.PI; // -90~+90도
+      const offset = (Math.random() - 0.5) * Math.PI / 2; // -45~+45도
       const angle = baseAngle + offset;
       const r = Math.random() * distance;
       tx = x + Math.cos(angle) * r;
@@ -132,7 +132,7 @@ export class NpcWanderManager {
     for (const fm of this.followerManagers) {
       // 디버깅: 팔로워 매니저별 리더 ID 및 팔로워 수
       // console.log(`[WANDER] FollowerManager move: leaderId=${fm.leaderId}, followerCount=${fm.getFollowerCount ? fm.getFollowerCount() : 'N/A'}`);
-      fm.moveAllFollowers(deltaTime);
+      fm.moveAllFollowers(deltaTime, "escort");
     }
   }
 }
