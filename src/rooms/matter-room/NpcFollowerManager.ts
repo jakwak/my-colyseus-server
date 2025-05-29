@@ -14,6 +14,7 @@ export class NpcFollowerManager {
   public leaderId: string
   private myNpcIds: Set<string> = new Set() // 이 매니저가 생성한 NPC ID들
   private npcDirs: Map<string, { x: number; y: number }> = new Map() // 각 NPC별 현재 방향
+  private formationType: "v" | "line" | "escort" // 대형 타입
   
   // 직접 수정 가능한 속성들
   formationAngle: number = Math.PI / 4 // 45도 각도 (0 ~ π/2)
@@ -21,10 +22,11 @@ export class NpcFollowerManager {
   speedMultiplier: number = 0.5 // 리더 대비 속도 비율 (0.1 ~ 2.0)
   formationSpacing: number = 50 // V자형 내 NPC 간 간격 (20 ~ 200)
 
-  constructor(world: Matter.World, npcs: MapSchema<Npc>, leaderId: string) {
+  constructor(world: Matter.World, npcs: MapSchema<Npc>, leaderId: string, formationType: "v" | "line" | "escort" = "v") {
     this.world = world
     this.npcs = npcs
     this.leaderId = leaderId
+    this.formationType = formationType
   }
 
   spawnFollowers(count: number, size: number) {
@@ -96,7 +98,7 @@ export class NpcFollowerManager {
     // console.log(`[FOLLOWER] 팔로워 생성: id=${id}, x=${x}, y=${y}`);
   }
 
-  moveAllFollowers(deltaTime: number, mode: "v" | "line" | "escort" = "v") {
+  moveAllFollowers(deltaTime: number, mode: "v" | "line" | "escort" | null = null) {
     const leader = this.npcs.get(this.leaderId)
     if (!leader) {
       // console.log(`[FOLLOWER] moveAllFollowers: 리더 NPC(state) 없음: leaderId=${this.leaderId}`);
@@ -159,7 +161,7 @@ export class NpcFollowerManager {
       const followerPos = followerBody.position;
 
       let targetX, targetY, targetDistance;
-      if (mode === "escort") {
+      if (mode === "escort" || this.formationType === "escort") {
         // 박스 대형: 4의 배수만 박스, 나머지는 뒤에 일렬
         const perSide = Math.floor(followerIds.length / 4);
         const boxCount = perSide * 4;
@@ -185,13 +187,13 @@ export class NpcFollowerManager {
           targetY = leaderPos.y + Math.sin(targetAngle) * targetDistance;
         }
       }
-      else if (mode === "v" && id.includes('_follower_center')) {
+      else if ((mode === "v" || this.formationType === "v") && id.includes('_follower_center')) {
         // V자 대형이지만 center 팔로워는 항상 일자 대형처럼 리더 뒤로
         targetDistance = this.baseDistance;
         const targetAngle = leaderAngle + Math.PI;
         targetX = leaderPos.x + Math.cos(targetAngle) * targetDistance;
         targetY = leaderPos.y + Math.sin(targetAngle) * targetDistance;
-      } else if (mode === "v") {
+      } else if (mode === "v" || this.formationType === "v") {
         // 기존 V자형
         const isLeftSide = id.includes('_follower_left_');
         const formationAngle = isLeftSide ? this.formationAngle : -this.formationAngle;
