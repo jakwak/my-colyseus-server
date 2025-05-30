@@ -11,7 +11,7 @@ const MIN_Y = MARGIN;
 const MAX_Y = SCREEN_HEIGHT - MARGIN;
 const NPC_MOVE_RADIUS = 1500;
 const NPC_SPEED = 50;
-const RAYCAST_DISTANCE = 50; // 레이캐스트 거리를 50으로 증가
+const RAYCAST_DISTANCE = 100; // 레이캐스트 거리를 100으로 증가
 
 export class NpcWanderManager {
   private world: Matter.World
@@ -43,9 +43,12 @@ export class NpcWanderManager {
       y: start.y + dir.y * RAYCAST_DISTANCE
     };
 
-    // 레이캐스트로 충돌 검사 (자기 자신 제외)
+    // 레이캐스트로 충돌 검사 (자기 자신과 다른 NPC들 제외)
     const collisions = Matter.Query.ray(
-      this.world.bodies.filter(body => body.id !== npcBody.id), // 자기 자신 제외
+      this.world.bodies.filter(body => 
+        body.id !== npcBody.id && // 자기 자신 제외
+        !body.label.startsWith('npc_') // NPC로 시작하는 모든 바디 제외
+      ),
       start,
       end,
       1
@@ -69,7 +72,7 @@ export class NpcWanderManager {
   // 여러 그룹을 독립적으로 관리 (각 wander NPC마다 별도의 followerManager)
   public spawnNpcs(count: number, size: number, followerCount?: number, followerSize?: number) {
     for (let i = 0; i < count; i++) {
-      const leader_id = `npc_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
+      const leader_id = `npc_leader_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
       const x = Math.random() * (MAX_X - MIN_X) + MIN_X
       const y = Math.random() * (MAX_Y - MIN_Y) + MIN_Y
       const npcBody = createNpcBody(this.world, leader_id, x, y, size / 2)

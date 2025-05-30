@@ -30,17 +30,31 @@ export class MatterRoom extends Room<State> {
     this.world = world
     addWalls(this.world)
 
-
     // 예시: wander NPC 3개, 각 NPC마다 팔로워 6개(size 10)씩 생성
-    this.npcWanderManager = new NpcWanderManager(this.world, this.state.npcs);
+    this.npcWanderManager = new NpcWanderManager(this.world, this.state.npcs)
 
     // 팔로워 매니저는 내부적으로 자동 생성/관리됨
     this.npcWanderManager.spawnNpcs(
-      5,    // wander NPC 개수
-      25,   // wander NPC 크기
-      5,    // 각 wander NPC마다 팔로워 개수
-      10    // 팔로워 크기
-    );
+      5, // wander NPC 개수
+      25, // wander NPC 크기
+      5, // 각 wander NPC마다 팔로워 개수
+      10 // 팔로워 크기
+    )
+
+    // // 팔로워 매니저는 내부적으로 자동 생성/관리됨
+    // this.npcWanderManager.spawnNpcs(
+    //   5, // wander NPC 개수
+    //   25, // wander NPC 크기
+    //   3, // 각 wander NPC마다 팔로워 개수
+    //   10 // 팔로워 크기
+    // )
+
+    // this.npcWanderManager.spawnNpcs(
+    //   5, // wander NPC 개수
+    //   25, // wander NPC 크기
+    //   8, // 각 wander NPC마다 팔로워 개수
+    //   10 // 팔로워 크기
+    // )
 
     this.onMessage('move', this.handleMove.bind(this))
     this.onMessage('position_sync', this.handlePositionSync.bind(this))
@@ -51,9 +65,13 @@ export class MatterRoom extends Room<State> {
     //====================================
     // 물리 업데이트 주기 설정
     this.engine.timing.timeScale = 1.0
-    
+
     this.setSimulationInterval((deltaTime) => {
       Matter.Engine.update(this.engine, deltaTime)
+
+      const stateSize = JSON.stringify(this.state.toJSON()).length
+      console.log(`Current state size: ${stateSize} bytes`)
+
       // === NPC 랜덤 이동 ===
       if (this.npcWanderManager) {
         // tick마다 wander/follower 현황 출력 (간략)
@@ -88,28 +106,28 @@ export class MatterRoom extends Room<State> {
       })
     }, 1000 / 60)
 
-    // 충돌 이벤트 리스너 등록
+    // 충돌 이벤트 리스너 수정
     Matter.Events.on(this.engine, 'collisionStart', (event) => {
       for (const pair of event.pairs) {
         const labelA = pair.bodyA.label
         const labelB = pair.bodyB.label
 
-        // bullet과 다른 오브젝트가 충돌했는지 확인
         if (this.state.bullets.has(labelA)) {
-          const bullet = this.state.bullets.get(labelA)
-          // 총알의 owner_id와 충돌한 바디의 label이 다를 때만 제거
-          if (bullet && bullet.owner_id !== labelB) {
-            this.removeBullet(labelA)
-          }
+          this.handleBulletCollision(labelA, labelB)
         } else if (this.state.bullets.has(labelB)) {
-          const bullet = this.state.bullets.get(labelB)
-          // 총알의 owner_id와 충돌한 바디의 label이 다를 때만 제거
-          if (bullet && bullet.owner_id !== labelA) {
-            this.removeBullet(labelB)
-          }
+          this.handleBulletCollision(labelB, labelA)
         }
       }
     })
+  }
+
+  // MatterRoom.ts에 추가할 함수
+  private handleBulletCollision(bulletId: string, npcId: string) {
+    const bullet = this.state.bullets.get(bulletId)
+    if (!bullet || bullet.owner_id === npcId) return
+
+    this.removeBullet(bulletId)
+    
   }
 
   private handleMove(client: Client, data: any) {
@@ -148,7 +166,7 @@ export class MatterRoom extends Room<State> {
   }
 
   private handleGetDebugBodies(client: Client, data: any) {
-    if (!this.debugPhysics) return;
+    if (!this.debugPhysics) return
     const bodyDataList: Array<{
       label: string
       x: number
@@ -263,14 +281,7 @@ export class MatterRoom extends Room<State> {
     const bullet = this.state.bullets.get(bulletId)
     if (bullet) {
       const body = this.world.bodies.find((b) => b.label === bulletId)
-      // let x = bullet.x
-      // let y = bullet.y
-
       if (body) {
-        // 최신 위치로 갱신
-        // const defoldPos = matterToDefold(body.position)
-        // x = defoldPos.x
-        // y = defoldPos.y
         try {
           Matter.World.remove(this.world, body)
         } catch (e) {
@@ -279,5 +290,17 @@ export class MatterRoom extends Room<State> {
       }
       this.state.bullets.delete(bulletId)
     }
+  }
+
+  private removeNpc(npcId: string) {
+    // 물리 엔진에서 바디 제거
+    const npcBody = this.world.bodies.find((body) => body.label === npcId)
+    if (npcBody) {
+      Matter.World.remove(this.world, npcBody)
+      console.log(`[NPC BODY] ${npcId} 제거됨`)
+    }
+    // NPC 상태에서 제거
+    this.state.npcs.delete(npcId)
+    console.log(`[NPC] ${npcId} 상태에서 제거됨`)
   }
 }
