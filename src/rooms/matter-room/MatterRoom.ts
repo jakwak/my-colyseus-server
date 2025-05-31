@@ -33,19 +33,19 @@ export class MatterRoom extends Room<State> {
 
     // 팔로워 매니저는 내부적으로 자동 생성/관리됨
     this.npcWanderManager.spawnNpcs(
-      5, // wander NPC 개수
+      1, // wander NPC 개수
       25, // wander NPC 크기
-      4, // 각 wander NPC마다 팔로워 개수
+      5, // 각 wander NPC마다 팔로워 개수
       10 // 팔로워 크기
     )
 
     // 팔로워 매니저는 내부적으로 자동 생성/관리됨
-    this.npcWanderManager.spawnNpcs(
-      5, // wander NPC 개수
-      25, // wander NPC 크기
-      7, // 각 wander NPC마다 팔로워 개수
-      10 // 팔로워 크기
-    )
+    // this.npcWanderManager.spawnNpcs(
+    //   5, // wander NPC 개수
+    //   25, // wander NPC 크기
+    //   7, // 각 wander NPC마다 팔로워 개수
+    //   10 // 팔로워 크기
+    // )
 
     // this.npcWanderManager.spawnNpcs(
     //   5, // wander NPC 개수
@@ -67,8 +67,8 @@ export class MatterRoom extends Room<State> {
     this.setSimulationInterval((deltaTime) => {
       Matter.Engine.update(this.engine, deltaTime)
 
-      // const stateSize = JSON.stringify(this.state.toJSON()).length
-      // console.log(`Current state size: ${stateSize} bytes`)
+      const stateSize = JSON.stringify(this.state.toJSON()).length
+      console.log(`Current state size: ${stateSize} bytes`)
 
       // === NPC 랜덤 이동 ===
       if (this.npcWanderManager) {

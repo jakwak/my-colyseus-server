@@ -3,12 +3,9 @@ import { matterToDefold, createNpcBody, CATEGORY_NPC, SCREEN_WIDTH, SCREEN_HEIGH
 import { Npc, Player } from '../schema/MatterRoomState'
 import { MapSchema } from '@colyseus/schema'
 import { NpcFollowerManager, NpcFormationType } from './NpcFollowerManager'
+import { detectObstacles, calculateAvoidanceDirection } from './NpcObstacleUtils'
+import { getRandomTargetNear } from './NpcTargetUtils'
 
-const MARGIN = 40;
-const MIN_X = MARGIN;
-const MAX_X = SCREEN_WIDTH - MARGIN;
-const MIN_Y = MARGIN;
-const MAX_Y = SCREEN_HEIGHT - MARGIN;
 const NPC_MOVE_RADIUS = 1500;
 const NPC_SPEED = 50;
 
@@ -42,7 +39,7 @@ export class NpcWanderManager {
     const NUM_RAYS = 5;
     const ANGLE_RANGE = Math.PI / 6; // 30도
     const OBSTACLE_DISTANCE = 50;
-    const PLAYER_DISTANCE = 100;
+    const PLAYER_DISTANCE = 200;
     let found = false;
     const baseAngle = Math.atan2(dir.y, dir.x);
     // 장애물 감지
@@ -56,7 +53,7 @@ export class NpcWanderManager {
       };
       const collisions = Matter.Query.ray(
         this.world.bodies.filter(body => 
-          body.id !== npcBody.id && !body.label.startsWith('npc_') && !body.label.startsWith('player_')
+          body.id !== npcBody.id && !body.label.startsWith('npc_')// && !body.label.startsWith('player_')
         ),
         start,
         end,
@@ -90,8 +87,11 @@ export class NpcWanderManager {
             console.log(`[NPCWander] 플레이어 감지: player 발견! label=${col.bodyB.label}`);
             // 팔로워 매니저에 타겟 지정
             for (const fm of this.followerManagers) {
-              fm.temporaryTarget = { x: player.x, y: SCREEN_HEIGHT - player.y };
-              fm.temporaryTargetActive = true;
+              if (fm.leaderId === npcBody.label && !fm.temporaryTargetActive) {
+                fm.temporaryTarget = { x: player.x, y: SCREEN_HEIGHT - player.y };
+                fm.temporaryTargetActive = true;
+                fm.temporaryTargetActivatedAt = Date.now();
+              }
             }
           }
         }
@@ -117,8 +117,8 @@ export class NpcWanderManager {
   public spawnNpcs(count: number, size: number, followerCount?: number, followerSize?: number) {
     for (let i = 0; i < count; i++) {
       const leader_id = `npc_leader_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
-      const x = Math.random() * (MAX_X - MIN_X) + MIN_X
-      const y = Math.random() * (MAX_Y - MIN_Y) + MIN_Y
+      const x = Math.random() * (SCREEN_WIDTH - 2 * 40) + 40;
+      const y = Math.random() * (SCREEN_HEIGHT - 2 * 40) + 40;
       const npcBody = createNpcBody(this.world, leader_id, x, y, size / 2)
       Matter.World.add(this.world, npcBody);
       const npc = new Npc();
@@ -157,7 +157,7 @@ export class NpcWanderManager {
       const r = Math.random() * distance;
       tx = x + Math.cos(angle) * r;
       ty = y + Math.sin(angle) * r;
-      if (tx >= MIN_X && tx <= MAX_X && ty >= MIN_Y && ty <= MAX_Y) break;
+      if (tx >= 40 && tx <= SCREEN_WIDTH - 40 && ty >= 40 && ty <= SCREEN_HEIGHT - 40) break;
     }
     return { x: tx, y: ty };
   }

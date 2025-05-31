@@ -1,19 +1,19 @@
 import Matter from 'matter-js'
 import { Npc } from '../schema/MatterRoomState'
 import {
-  defoldToMatter,
-  matterToDefold,
   createNpcBody,
   CATEGORY_NPC,
   SCREEN_WIDTH,
   SCREEN_HEIGHT,
 } from './physics'
 import { MapSchema } from '@colyseus/schema'
+import { clamp, defoldToMatter, matterToDefold } from './NpcPhysicsUtils'
+import {
+  getFormationTargetForFollower,
+  getBoxEscortOffsets,
+} from './NpcFormationUtils'
 
 const MARGIN = 40
-function clamp(val: number, min: number, max: number) {
-  return Math.max(min, Math.min(max, val))
-}
 
 export type NpcFormationType = 'v' | 'line' | 'escort' | 'scatter' | 'hline'
 
@@ -24,12 +24,16 @@ export class NpcFollowerManager {
   public myNpcIds: Set<string> = new Set() // 이 매니저가 생성한 NPC ID들
   private npcDirs: Map<string, { x: number; y: number }> = new Map() // 각 NPC별 현재 방향
   public formationType: NpcFormationType
-  public followerRoles: Map<string, 'left' | 'right' | 'center' | 'front' | 'back' | 'box' | 'scatter' | 'hline'> = new Map()
-  public scatterTargets: Map<string, { x: number, y: number }> = new Map()
-  public temporaryTarget: { x: number, y: number } | null = null;
-  public temporaryTargetActive: boolean = false;
-  public returningToFormation: boolean = false;
-  public tempTargetOffsets: Map<string, { x: number, y: number }> = new Map();
+  public followerRoles: Map<
+    string,
+    'left' | 'right' | 'center' | 'front' | 'back' | 'box' | 'scatter' | 'hline'
+  > = new Map()
+  public scatterTargets: Map<string, { x: number; y: number }> = new Map()
+  public temporaryTarget: { x: number; y: number } | null = null
+  public temporaryTargetActive: boolean = false
+  public returningToFormation: boolean = false
+  public tempTargetOffsets: Map<string, { x: number; y: number }> = new Map()
+  public temporaryTargetActivatedAt: number | null = null
 
   // 직접 수정 가능한 속성들
   formationAngle: number = Math.PI / 4 // 45도 각도 (0 ~ π/2)
@@ -48,7 +52,7 @@ export class NpcFollowerManager {
     this.leaderId = leaderId
     this.formationType = formationType
   }
- 
+
   spawnFollowers(count: number, size: number) {
     const leader = this.npcs.get(this.leaderId)
     if (!leader) return
@@ -57,59 +61,59 @@ export class NpcFollowerManager {
     if (!leaderBody) return
 
     if (this.formationType === 'scatter') {
-      const radius = 100;
-      const minDist = 50;
-      const offsets: { x: number, y: number }[] = [];
+      const radius = 100
+      const minDist = 50
+      const offsets: { x: number; y: number }[] = []
       for (let i = 0; i < count; i++) {
-        let offset: { x: number, y: number };
-        let tryCount = 0;
+        let offset: { x: number; y: number }
+        let tryCount = 0
         while (true) {
-          const angle = Math.random() * 2 * Math.PI;
-          const r = Math.random() * radius;
-          offset = { x: Math.cos(angle) * r, y: Math.sin(angle) * r };
+          const angle = Math.random() * 2 * Math.PI
+          const r = Math.random() * radius
+          offset = { x: Math.cos(angle) * r, y: Math.sin(angle) * r }
           // 모든 기존 오프셋과의 거리 체크
-          const ok = offsets.every(o => {
-            const dx = o.x - offset.x;
-            const dy = o.y - offset.y;
-            return Math.sqrt(dx * dx + dy * dy) >= minDist;
-          });
-          if (ok || tryCount++ > 100) break; // 100번 시도 후엔 그냥 배치
+          const ok = offsets.every((o) => {
+            const dx = o.x - offset.x
+            const dy = o.y - offset.y
+            return Math.sqrt(dx * dx + dy * dy) >= minDist
+          })
+          if (ok || tryCount++ > 100) break // 100번 시도 후엔 그냥 배치
         }
-        offsets.push(offset);
-        const id = `${this.leaderId}_follower_${i}`;
-        const x = leaderBody.position.x + offset.x;
-        const y = leaderBody.position.y + offset.y;
-        this.createFollower(x, y, size, id);
-        this.followerRoles.set(id, 'scatter');
-        this.scatterTargets.set(id, offset);
+        offsets.push(offset)
+        const id = `${this.leaderId}_follower_${i}`
+        const x = leaderBody.position.x + offset.x
+        const y = leaderBody.position.y + offset.y
+        this.createFollower(x, y, size, id)
+        this.followerRoles.set(id, 'scatter')
+        this.scatterTargets.set(id, offset)
       }
-      return;
+      return
     }
 
     if (this.formationType === 'hline') {
       // 리더 기준 좌우로 일렬 배치 (리더 방향 기준)
-      const centerIdx = count / 2 - 0.5;
-      const leaderBodyAngle = leaderBody.angle;
-      const perpX = Math.cos(leaderBodyAngle + Math.PI / 2);
-      const perpY = Math.sin(leaderBodyAngle + Math.PI / 2);
-      const forwardX = Math.cos(leaderBodyAngle);
-      const forwardY = Math.sin(leaderBodyAngle);
+      const centerIdx = count / 2 - 0.5
+      const leaderBodyAngle = leaderBody.angle
+      const perpX = Math.cos(leaderBodyAngle + Math.PI / 2)
+      const perpY = Math.sin(leaderBodyAngle + Math.PI / 2)
+      const forwardX = Math.cos(leaderBodyAngle)
+      const forwardY = Math.sin(leaderBodyAngle)
       for (let i = 0; i < count; i++) {
-        const id = `${this.leaderId}_follower_${i}`;
-        const offset = (i - centerIdx) * this.formationSpacing;
-        let x, y;
+        const id = `${this.leaderId}_follower_${i}`
+        const offset = (i - centerIdx) * this.formationSpacing
+        let x, y
         if (count % 2 === 1 && i === Math.floor(centerIdx + 0.5)) {
           // 홀수면 중앙은 리더 앞
-          x = leaderBody.position.x + forwardX * this.baseDistance;
-          y = leaderBody.position.y + forwardY * this.baseDistance;
+          x = leaderBody.position.x + forwardX * this.baseDistance
+          y = leaderBody.position.y + forwardY * this.baseDistance
         } else {
-          x = leaderBody.position.x + perpX * offset;
-          y = leaderBody.position.y + perpY * offset;
+          x = leaderBody.position.x + perpX * offset
+          y = leaderBody.position.y + perpY * offset
         }
-        this.createFollower(x, y, size, id);
-        this.followerRoles.set(id, 'hline');
+        this.createFollower(x, y, size, id)
+        this.followerRoles.set(id, 'hline')
       }
-      return;
+      return
     }
 
     // 역할 분배
@@ -117,24 +121,54 @@ export class NpcFollowerManager {
     if (this.formationType === 'escort') {
       if (count === 1) {
         const id = `${this.leaderId}_follower_${idx++}`
-        this.createFollower(leaderBody.position.x, leaderBody.position.y, size, id)
+        this.createFollower(
+          leaderBody.position.x,
+          leaderBody.position.y,
+          size,
+          id
+        )
         this.followerRoles.set(id, 'front')
       } else if (count === 2) {
         const idL = `${this.leaderId}_follower_${idx++}`
-        this.createFollower(leaderBody.position.x, leaderBody.position.y, size, idL)
+        this.createFollower(
+          leaderBody.position.x,
+          leaderBody.position.y,
+          size,
+          idL
+        )
         this.followerRoles.set(idL, 'left')
         const idR = `${this.leaderId}_follower_${idx++}`
-        this.createFollower(leaderBody.position.x, leaderBody.position.y, size, idR)
+        this.createFollower(
+          leaderBody.position.x,
+          leaderBody.position.y,
+          size,
+          idR
+        )
         this.followerRoles.set(idR, 'right')
       } else if (count === 3) {
         const idF = `${this.leaderId}_follower_${idx++}`
-        this.createFollower(leaderBody.position.x, leaderBody.position.y, size, idF)
+        this.createFollower(
+          leaderBody.position.x,
+          leaderBody.position.y,
+          size,
+          idF
+        )
         this.followerRoles.set(idF, 'front')
         const idL = `${this.leaderId}_follower_${idx++}`
-        this.createFollower(leaderBody.position.x, leaderBody.position.y, size, idL)
+        this.createFollower(
+          leaderBody.position.x,
+          leaderBody.position.y,
+          size,
+          idL
+        )
         this.followerRoles.set(idL, 'left')
         const idR = `${this.leaderId}_follower_${idx++}`
-        this.createFollower(leaderBody.position.x, leaderBody.position.y, size, idR)
+        this.createFollower(
+          leaderBody.position.x,
+          leaderBody.position.y,
+          size,
+          idR
+        )
         this.followerRoles.set(idR, 'right')
       } else {
         // 4개 이상: 박스 + 뒤
@@ -143,34 +177,60 @@ export class NpcFollowerManager {
         for (let side = 0; side < 4; side++) {
           for (let j = 0; j < perSide; j++) {
             const id = `${this.leaderId}_follower_${idx++}`
-            this.createFollower(leaderBody.position.x, leaderBody.position.y, size, id)
+            this.createFollower(
+              leaderBody.position.x,
+              leaderBody.position.y,
+              size,
+              id
+            )
             this.followerRoles.set(id, 'box')
           }
         }
         const remainingCount = count - boxCount
         for (let i = 0; i < remainingCount; i++) {
           const id = `${this.leaderId}_follower_${idx++}`
-          this.createFollower(leaderBody.position.x, leaderBody.position.y, size, id)
+          this.createFollower(
+            leaderBody.position.x,
+            leaderBody.position.y,
+            size,
+            id
+          )
           this.followerRoles.set(id, 'back')
         }
       }
     } else {
       // V자형/일자형
-      let left = 0, right = 0;
+      let left = 0,
+        right = 0
       for (let i = 0; i < count; i++) {
-        const id = `${this.leaderId}_follower_${i}`;
+        const id = `${this.leaderId}_follower_${i}`
         // 마지막 1개가 남았고, count가 홀수면 center
         if (count % 2 === 1 && i === count - 1) {
-          this.createFollower(leaderBody.position.x, leaderBody.position.y, size, id);
-          this.followerRoles.set(id, 'center');
-        } else if ((i % 2) === 0) {
-          this.createFollower(leaderBody.position.x, leaderBody.position.y, size, id);
-          this.followerRoles.set(id, 'left');
-          left++;
+          this.createFollower(
+            leaderBody.position.x,
+            leaderBody.position.y,
+            size,
+            id
+          )
+          this.followerRoles.set(id, 'center')
+        } else if (i % 2 === 0) {
+          this.createFollower(
+            leaderBody.position.x,
+            leaderBody.position.y,
+            size,
+            id
+          )
+          this.followerRoles.set(id, 'left')
+          left++
         } else {
-          this.createFollower(leaderBody.position.x, leaderBody.position.y, size, id);
-          this.followerRoles.set(id, 'right');
-          right++;
+          this.createFollower(
+            leaderBody.position.x,
+            leaderBody.position.y,
+            size,
+            id
+          )
+          this.followerRoles.set(id, 'right')
+          right++
         }
       }
     }
@@ -196,151 +256,60 @@ export class NpcFollowerManager {
     // console.log(`[FOLLOWER] 팔로워 생성: id=${id}, x=${x}, y=${y}`);
   }
 
-  // 대형별 목표 위치 계산 함수
-  private getFormationTargetForFollower(id: string, i: number, leaderPos: {x:number, y:number}, leaderAngle: number): { x: number, y: number } {
-    const followerIds = Array.from(this.myNpcIds);
-    const role = this.followerRoles.get(id);
-    let leftIdx = 0, rightIdx = 0, boxIdx = 0, backIdx = 0;
-    // escort(박스) 대형용 offset 계산 함수 (내부 복붙)
-    function getBoxEscortOffsets(count: number, boxDistance: number) {
-      const offsets: { x: number; y: number }[] = []
-      const perSide = Math.floor(count / 4)
-      for (let side = 0; side < 4; side++) {
-        for (let j = 0; j < perSide; j++) {
-          const t = (j + 0.5) / perSide
-          let x = 0, y = 0
-          if (side === 0) { x = -boxDistance + t * 2 * boxDistance; y = -boxDistance }
-          else if (side === 1) { x = boxDistance; y = -boxDistance + t * 2 * boxDistance }
-          else if (side === 2) { x = boxDistance - t * 2 * boxDistance; y = boxDistance }
-          else if (side === 3) { x = -boxDistance; y = boxDistance - t * 2 * boxDistance }
-          offsets.push({ x, y })
-        }
-      }
-      return offsets
-    }
-    // escort
-    if (this.formationType === 'escort') {
-      const followerCount = followerIds.length
-      const distance = this.baseDistance
-      if (followerCount === 1 && role === 'front') {
-        return { x: leaderPos.x + Math.cos(leaderAngle) * distance, y: leaderPos.y + Math.sin(leaderAngle) * distance }
-      } else if (followerCount === 2) {
-        if (role === 'left') {
-          return { x: leaderPos.x + Math.cos(leaderAngle + Math.PI / 2) * distance, y: leaderPos.y + Math.sin(leaderAngle + Math.PI / 2) * distance }
-        } else if (role === 'right') {
-          return { x: leaderPos.x + Math.cos(leaderAngle - Math.PI / 2) * distance, y: leaderPos.y + Math.sin(leaderAngle - Math.PI / 2) * distance }
-        }
-      } else if (followerCount === 3) {
-        if (role === 'front') {
-          return { x: leaderPos.x + Math.cos(leaderAngle) * distance, y: leaderPos.y + Math.sin(leaderAngle) * distance }
-        } else if (role === 'left') {
-          return { x: leaderPos.x + Math.cos(leaderAngle + Math.PI / 2) * distance, y: leaderPos.y + Math.sin(leaderAngle + Math.PI / 2) * distance }
-        } else if (role === 'right') {
-          return { x: leaderPos.x + Math.cos(leaderAngle - Math.PI / 2) * distance, y: leaderPos.y + Math.sin(leaderAngle - Math.PI / 2) * distance }
-        }
-      } else {
-        // 4개 이상: 박스 + 뒤
-        const perSide = Math.floor(followerCount / 4)
-        const boxCount = perSide * 4
-        const boxDistance = this.baseDistance + this.formationSpacing * 0.8
-        let boxOffsets: { x: number; y: number }[] = []
-        if (boxCount > 0) boxOffsets = getBoxEscortOffsets(boxCount, boxDistance)
-        const idx = followerIds.indexOf(id)
-        if (role === 'box') {
-          const off = boxOffsets[boxIdx++]
-          const cosA = Math.cos(leaderAngle)
-          const sinA = Math.sin(leaderAngle)
-          const rx = off.x * cosA - off.y * sinA
-          const ry = off.x * sinA + off.y * cosA
-          return { x: leaderPos.x + rx, y: leaderPos.y + ry }
-        } else if (role === 'back') {
-          const lineIdx = backIdx++
-          const targetDistance = boxDistance + (lineIdx + 1) * this.formationSpacing
-          const targetAngle = leaderAngle + Math.PI
-          return { x: leaderPos.x + Math.cos(targetAngle) * targetDistance, y: leaderPos.y + Math.sin(targetAngle) * targetDistance }
-        }
-      }
-    } else if ((this.formationType === 'v') && role === 'center') {
-      const targetDistance = this.baseDistance
-      const targetAngle = leaderAngle + Math.PI
-      return { x: leaderPos.x + Math.cos(targetAngle) * targetDistance, y: leaderPos.y + Math.sin(targetAngle) * targetDistance }
-    } else if (this.formationType === 'v') {
-      if (role === 'left' || role === 'right') {
-        const isLeftSide = role === 'left';
-        const formationAngle = isLeftSide ? this.formationAngle : -this.formationAngle;
-        let index;
-        if (isLeftSide) {
-          index = leftIdx++;
-        } else {
-          index = rightIdx++;
-        }
-        const targetDistance = this.baseDistance + index * this.formationSpacing;
-        const targetAngle = leaderAngle + Math.PI + formationAngle;
-        return { x: leaderPos.x + Math.cos(targetAngle) * targetDistance, y: leaderPos.y + Math.sin(targetAngle) * targetDistance }
-      }
-    } else if (role === 'hline') {
-      const centerIdx = followerIds.length / 2 - 0.5;
-      const myIdx = followerIds.indexOf(id);
-      const offset = (myIdx - centerIdx) * this.formationSpacing;
-      const perpX = Math.cos(leaderAngle + Math.PI / 2);
-      const perpY = Math.sin(leaderAngle + Math.PI / 2);
-      const forwardX = Math.cos(leaderAngle);
-      const forwardY = Math.sin(leaderAngle);
-      if (followerIds.length % 2 === 1 && myIdx === Math.floor(centerIdx + 0.5)) {
-        return { x: leaderPos.x + forwardX * this.baseDistance, y: leaderPos.y + forwardY * this.baseDistance }
-      } else {
-        return { x: leaderPos.x + perpX * offset, y: leaderPos.y + perpY * offset }
-      }
-    } else if (role === 'scatter') {
-      const offset = this.scatterTargets.get(id);
-      if (offset) {
-        return { x: leaderPos.x + offset.x, y: leaderPos.y + offset.y }
-      } else {
-        return { x: leaderPos.x, y: leaderPos.y }
-      }
-    } else {
-      // 일자형: 리더 뒤쪽으로 일렬 정렬
-      const idx = followerIds.indexOf(id)
-      const targetDistance = this.baseDistance + idx * this.formationSpacing
-      const targetAngle = leaderAngle + Math.PI
-      return { x: leaderPos.x + Math.cos(targetAngle) * targetDistance, y: leaderPos.y + Math.sin(targetAngle) * targetDistance }
-    }
-    // fallback
-    return { x: leaderPos.x, y: leaderPos.y }
-  }
-
   // 모든 팔로워가 타겟에 도달했는지 체크
-  private allFollowersAtTarget(target: { x: number, y: number } | null, threshold: number = 50): boolean {
-    const followerIds = Array.from(this.myNpcIds);
-    const leader = this.npcs.get(this.leaderId);
-    const leaderBody = this.world.bodies.find((b) => b.label === this.leaderId);
-    if (!leader || !leaderBody) return false;
-    const leaderPos = leaderBody.position;
-    const leaderAngle = leaderBody.angle;
+  private allFollowersAtTarget(
+    target: { x: number; y: number } | null,
+    threshold: number = 50
+  ): boolean {
+    const followerIds = Array.from(this.myNpcIds)
+    const leader = this.npcs.get(this.leaderId)
+    const leaderBody = this.world.bodies.find((b) => b.label === this.leaderId)
+    if (!leader || !leaderBody) return false
+    const leaderPos = leaderBody.position
+    const leaderVelocity = leaderBody.velocity
+    const leaderSpeed = Math.sqrt(
+      leaderVelocity.x * leaderVelocity.x + leaderVelocity.y * leaderVelocity.y
+    )
+
+    // 리더의 이동 방향 계산
+    const leaderDirX = leaderSpeed > 0 ? leaderVelocity.x / leaderSpeed : 0
+    const leaderDirY = leaderSpeed > 0 ? -leaderVelocity.y / leaderSpeed : 0 // y축 반전
+    const leaderAngle = Math.atan2(leaderDirY, leaderDirX)
+
     for (let i = 0; i < followerIds.length; i++) {
-      const id = followerIds[i];
-      const npc = this.npcs.get(id);
-      if (!npc) continue;
-      let tx, ty;
+      const id = followerIds[i]
+      const npc = this.npcs.get(id)
+      if (!npc) continue
+      let tx, ty
       if (target) {
-        tx = target.x;
-        ty = target.y;
+        tx = target.x
+        ty = target.y
       } else {
-        const formationTarget = this.getFormationTargetForFollower(id, i, leaderPos, leaderAngle);
-        tx = formationTarget.x;
-        ty = formationTarget.y;
+        const formationTarget = getFormationTargetForFollower(
+          id,
+          i,
+          followerIds,
+          this.followerRoles.get(id) || '',
+          leaderPos,
+          leaderAngle,
+          this.formationType,
+          this.baseDistance,
+          this.formationAngle,
+          this.formationSpacing,
+          this.scatterTargets
+        )
+        tx = formationTarget.x
+        ty = formationTarget.y
       }
-      const dx = npc.x - tx;
-      const dy = npc.y - ty;
-      if (Math.sqrt(dx * dx + dy * dy) > threshold) return false;
+      const dx = npc.x - tx
+      const dy = npc.y - ty
+      if (Math.sqrt(dx * dx + dy * dy) > threshold) return false
     }
-    return true;
+    return true
   }
 
-  moveAllFollowers(
-    deltaTime: number
-  ) {
-    const leader = this.npcs.get(this.leaderId) 
+  moveAllFollowers(deltaTime: number) {
+    const leader = this.npcs.get(this.leaderId)
     if (!leader) {
       console.log(
         `[FOLLOWER] moveAllFollowers: 리더 NPC(state) 없음: leaderId=${this.leaderId}`
@@ -364,7 +333,7 @@ export class NpcFollowerManager {
 
     // 리더의 이동 방향 계산
     const leaderDirX = leaderSpeed > 0 ? leaderVelocity.x / leaderSpeed : 0
-    const leaderDirY = leaderSpeed > 0 ? leaderVelocity.y / leaderSpeed : 0
+    const leaderDirY = leaderSpeed > 0 ? -leaderVelocity.y / leaderSpeed : 0 // y축 반전
     const leaderAngle = Math.atan2(leaderDirY, leaderDirX)
 
     // 자신이 생성한 NPC만 이동
@@ -431,77 +400,134 @@ export class NpcFollowerManager {
       let targetX, targetY, targetDistance
       // 임시 타겟이 활성화되어 있으면 해당 위치로 이동
       if (this.temporaryTargetActive && this.temporaryTarget) {
-        // 팔로워별 임시 목표 오프셋이 없으면 생성
-        let offset = this.tempTargetOffsets.get(id);
-        if (!offset) {
-          const angle = Math.random() * 2 * Math.PI;
-          const r = 100 + Math.random() * 100;
-          offset = { x: Math.cos(angle) * r, y: Math.sin(angle) * r };
-          this.tempTargetOffsets.set(id, offset);
+        // 임시 타겟 활성화 후 5초가 지나면 무조건 formation 복귀
+        if (
+          this.temporaryTargetActivatedAt &&
+          Date.now() - this.temporaryTargetActivatedAt > 5000
+        ) {
+          this.temporaryTargetActive = false
+          this.returningToFormation = true
+          this.tempTargetOffsets.clear()
+          this.temporaryTargetActivatedAt = null
         }
-        targetX = this.temporaryTarget.x + offset.x;
-        targetY = this.temporaryTarget.y + offset.y;
-        targetDistance = Math.sqrt((targetX - followerPos.x) ** 2 + (targetY - followerPos.y) ** 2);
+        // 팔로워별 임시 목표 오프셋이 없으면 생성
+        let offset = this.tempTargetOffsets.get(id)
+        if (!offset) {
+          const angle = Math.random() * 2 * Math.PI
+          const r = 100 + Math.random() * 100
+          offset = { x: Math.cos(angle) * r, y: Math.sin(angle) * r }
+          this.tempTargetOffsets.set(id, offset)
+        }
+        targetX = this.temporaryTarget.x + offset.x
+        targetY = this.temporaryTarget.y + offset.y
+        targetDistance = Math.sqrt(
+          (targetX - followerPos.x) ** 2 + (targetY - followerPos.y) ** 2
+        )
         // 목표점에 도달하면 새로운 오프셋으로 갱신
         if (targetDistance < 10) {
-          const angle = Math.random() * 2 * Math.PI;
-          const r = 100 + Math.random() * 100;
-          this.tempTargetOffsets.set(id, { x: Math.cos(angle) * r, y: Math.sin(angle) * r });
+          const angle = Math.random() * 2 * Math.PI
+          const r = 100 + Math.random() * 100
+          this.tempTargetOffsets.set(id, {
+            x: Math.cos(angle) * r,
+            y: Math.sin(angle) * r,
+          })
         }
-        if (this.allFollowersAtTarget(this.temporaryTarget)) {
-          this.temporaryTargetActive = false;
-          this.returningToFormation = true;
-          this.tempTargetOffsets.clear();
+
+        const safeX = clamp(targetX, MARGIN, SCREEN_WIDTH - MARGIN)
+        const safeY = clamp(targetY, MARGIN, SCREEN_HEIGHT - MARGIN)
+        const dx = safeX - followerPos.x
+        const dy = safeY - followerPos.y
+        const distanceToTarget = Math.sqrt(dx * dx + dy * dy)
+        const speed = leaderSpeed * this.speedMultiplier
+        const maxSpeed = Math.min(
+          Math.max(speed * 1.5, distanceToTarget * 0.5),
+          2
+        )
+        let force = distanceToTarget * 0.2
+        if (distanceToTarget < 3) {
+          force = 0
         } else {
-          const safeX = clamp(targetX, MARGIN, SCREEN_WIDTH - MARGIN)
-          const safeY = clamp(targetY, MARGIN, SCREEN_HEIGHT - MARGIN)
-          const dx = safeX - followerPos.x
-          const dy = safeY - followerPos.y
-          const distanceToTarget = Math.sqrt(dx * dx + dy * dy)
-          const speed = leaderSpeed * this.speedMultiplier
-          const maxSpeed = Math.min(Math.max(speed * 1.5, distanceToTarget * 0.5), 2)
-          let force = distanceToTarget * 0.2
-          if (distanceToTarget < 3) {
-            force = 0
-          } else {
-            force = Math.min(force, maxSpeed)
-          }
-          if (distanceToTarget > 5) {
-            const angle = Math.atan2(dy, dx)
-            Matter.Body.setVelocity(followerBody, {
-              x: Math.cos(angle) * force,
-              y: Math.sin(angle) * force,
-            })
-            Matter.Body.setAngle(followerBody, leaderAngle)
-          } else {
-            Matter.Body.setVelocity(followerBody, { x: 0, y: 0 })
-          }
-          const defoldPos = matterToDefold(followerBody.position)
-          npc.x = defoldPos.x
-          npc.y = defoldPos.y
-          const dirX = dx / (distanceToTarget || 1)
-          const dirY = dy / (distanceToTarget || 1)
-          npc.dirx = dirX
-          npc.diry = dirY
-          this.npcDirs.set(id, { x: dirX, y: dirY })
-          continue;
+          force = Math.min(force, maxSpeed)
         }
+        if (distanceToTarget > 5) {
+          const angle = Math.atan2(dy, dx)
+          Matter.Body.setVelocity(followerBody, {
+            x: Math.cos(angle) * force,
+            y: Math.sin(angle) * force,
+          })
+          Matter.Body.setAngle(followerBody, leaderAngle)
+        } else {
+          Matter.Body.setVelocity(followerBody, { x: 0, y: 0 })
+        }
+        const defoldPos = matterToDefold(followerBody.position)
+        npc.x = defoldPos.x
+        npc.y = defoldPos.y
+        const dirX = dx / (distanceToTarget || 1)
+        const dirY = dy / (distanceToTarget || 1)
+        npc.dirx = dirX
+        npc.diry = dirY
+        this.npcDirs.set(id, { x: dirX, y: dirY })
+        continue
       }
       if (this.returningToFormation) {
         if (this.allFollowersAtTarget(null)) {
-          this.returningToFormation = false;
+          this.returningToFormation = false
+          for (let j = 0; j < followerIds.length; j++) {
+            const fid = followerIds[j]
+            const followerBody2 = this.world.bodies.find((b) => b.label === fid)
+            const npc2 = this.npcs.get(fid)
+            if (!followerBody2 || !npc2) continue
+            const formationTarget = getFormationTargetForFollower(
+              fid,
+              j,
+              followerIds,
+              this.followerRoles.get(fid) || '',
+              leaderPos,
+              leaderAngle,
+              this.formationType,
+              this.baseDistance,
+              this.formationAngle,
+              this.formationSpacing,
+              this.scatterTargets
+            )
+            const matterPos = defoldToMatter(formationTarget)
+            Matter.Body.setPosition(followerBody2, matterPos)
+            Matter.Body.setVelocity(followerBody2, { x: 0, y: 0 })
+            // state는 formationTarget(Defold/Colyseus)로 직접 설정
+            npc2.x = formationTarget.x
+            npc2.y = formationTarget.y
+          }
         } else {
-          const formationTarget = this.getFormationTargetForFollower(id, i, leaderPos, leaderAngle);
-          targetX = formationTarget.x;
-          targetY = formationTarget.y;
-          targetDistance = Math.sqrt((targetX - followerPos.x) * (targetX - followerPos.x) + (targetY - followerPos.y) * (targetY - followerPos.y));
+          const formationTarget = getFormationTargetForFollower(
+            id,
+            i,
+            followerIds,
+            this.followerRoles.get(id) || '',
+            leaderPos,
+            leaderAngle,
+            this.formationType,
+            this.baseDistance,
+            this.formationAngle,
+            this.formationSpacing,
+            this.scatterTargets
+          )
+          const matterTarget = defoldToMatter(formationTarget)
+          targetX = matterTarget.x
+          targetY = matterTarget.y
+          targetDistance = Math.sqrt(
+            (targetX - followerPos.x) * (targetX - followerPos.x) +
+              (targetY - followerPos.y) * (targetY - followerPos.y)
+          )
           const safeX = clamp(targetX, MARGIN, SCREEN_WIDTH - MARGIN)
           const safeY = clamp(targetY, MARGIN, SCREEN_HEIGHT - MARGIN)
           const dx = safeX - followerPos.x
           const dy = safeY - followerPos.y
           const distanceToTarget = Math.sqrt(dx * dx + dy * dy)
           const speed = leaderSpeed * this.speedMultiplier
-          const maxSpeed = Math.min(Math.max(speed * 1.5, distanceToTarget * 0.5), 2)
+          const maxSpeed = Math.min(
+            Math.max(speed * 1.5, distanceToTarget * 0.5),
+            2
+          )
           let force = distanceToTarget * 0.2
           if (distanceToTarget < 3) {
             force = 0
@@ -510,9 +536,11 @@ export class NpcFollowerManager {
           }
           if (distanceToTarget > 5) {
             const angle = Math.atan2(dy, dx)
+            const leaderForceX = leaderVelocity.x * this.speedMultiplier
+            const leaderForceY = leaderVelocity.y * this.speedMultiplier
             Matter.Body.setVelocity(followerBody, {
-              x: Math.cos(angle) * force,
-              y: Math.sin(angle) * force,
+              x: Math.cos(angle) * force + leaderForceX,
+              y: Math.sin(angle) * force + leaderForceY,
             })
             Matter.Body.setAngle(followerBody, leaderAngle)
           } else {
@@ -526,19 +554,19 @@ export class NpcFollowerManager {
           npc.dirx = dirX
           npc.diry = dirY
           this.npcDirs.set(id, { x: dirX, y: dirY })
-          continue;
+          continue
         }
       }
       if (role === 'scatter') {
-        const offset = this.scatterTargets.get(id);
+        const offset = this.scatterTargets.get(id)
         if (offset) {
-          targetX = leaderPos.x + offset.x;
-          targetY = leaderPos.y + offset.y;
-          targetDistance = Math.sqrt(offset.x * offset.x + offset.y * offset.y);
+          targetX = leaderPos.x + offset.x
+          targetY = leaderPos.y + offset.y
+          targetDistance = Math.sqrt(offset.x * offset.x + offset.y * offset.y)
         } else {
-          targetX = leaderPos.x;
-          targetY = leaderPos.y;
-          targetDistance = 0;
+          targetX = leaderPos.x
+          targetY = leaderPos.y
+          targetDistance = 0
         }
       } else if (this.formationType === 'escort') {
         const followerCount = followerIds.length
@@ -550,11 +578,15 @@ export class NpcFollowerManager {
           targetDistance = distance
         } else if (followerCount === 2) {
           if (role === 'left') {
-            targetX = leaderPos.x + Math.cos(leaderAngle + Math.PI / 2) * distance
-            targetY = leaderPos.y + Math.sin(leaderAngle + Math.PI / 2) * distance
+            targetX =
+              leaderPos.x + Math.cos(leaderAngle + Math.PI / 2) * distance
+            targetY =
+              leaderPos.y + Math.sin(leaderAngle + Math.PI / 2) * distance
           } else if (role === 'right') {
-            targetX = leaderPos.x + Math.cos(leaderAngle - Math.PI / 2) * distance
-            targetY = leaderPos.y + Math.sin(leaderAngle - Math.PI / 2) * distance
+            targetX =
+              leaderPos.x + Math.cos(leaderAngle - Math.PI / 2) * distance
+            targetY =
+              leaderPos.y + Math.sin(leaderAngle - Math.PI / 2) * distance
           }
           targetDistance = distance
         } else if (followerCount === 3) {
@@ -562,11 +594,15 @@ export class NpcFollowerManager {
             targetX = leaderPos.x + Math.cos(leaderAngle) * distance
             targetY = leaderPos.y + Math.sin(leaderAngle) * distance
           } else if (role === 'left') {
-            targetX = leaderPos.x + Math.cos(leaderAngle + Math.PI / 2) * distance
-            targetY = leaderPos.y + Math.sin(leaderAngle + Math.PI / 2) * distance
+            targetX =
+              leaderPos.x + Math.cos(leaderAngle + Math.PI / 2) * distance
+            targetY =
+              leaderPos.y + Math.sin(leaderAngle + Math.PI / 2) * distance
           } else if (role === 'right') {
-            targetX = leaderPos.x + Math.cos(leaderAngle - Math.PI / 2) * distance
-            targetY = leaderPos.y + Math.sin(leaderAngle - Math.PI / 2) * distance
+            targetX =
+              leaderPos.x + Math.cos(leaderAngle - Math.PI / 2) * distance
+            targetY =
+              leaderPos.y + Math.sin(leaderAngle - Math.PI / 2) * distance
           }
           targetDistance = distance
         } else {
@@ -592,10 +628,7 @@ export class NpcFollowerManager {
             targetY = leaderPos.y + Math.sin(targetAngle) * targetDistance
           }
         }
-      } else if (
-        (this.formationType === 'v') &&
-        role === 'center'
-      ) {
+      } else if (this.formationType === 'v' && role === 'center') {
         // V자 대형이지만 center 팔로워는 항상 일자 대형처럼 리더 뒤로
         targetDistance = this.baseDistance
         const targetAngle = leaderAngle + Math.PI
@@ -604,37 +637,42 @@ export class NpcFollowerManager {
       } else if (this.formationType === 'v') {
         // 기존 V자형
         if (role === 'left' || role === 'right') {
-          const isLeftSide = role === 'left';
-          const formationAngle = isLeftSide ? this.formationAngle : -this.formationAngle;
-          let index;
+          const isLeftSide = role === 'left'
+          const formationAngle = isLeftSide
+            ? this.formationAngle
+            : -this.formationAngle
+          let index
           if (isLeftSide) {
-            index = leftIdx++;
+            index = leftIdx++
           } else {
-            index = rightIdx++;
+            index = rightIdx++
           }
-          targetDistance = this.baseDistance + index * this.formationSpacing;
-          const targetAngle = leaderAngle + Math.PI + formationAngle;
-          targetX = leaderPos.x + Math.cos(targetAngle) * targetDistance;
-          targetY = leaderPos.y + Math.sin(targetAngle) * targetDistance;
+          targetDistance = this.baseDistance + index * this.formationSpacing
+          const targetAngle = leaderAngle + Math.PI + formationAngle
+          targetX = leaderPos.x + Math.cos(targetAngle) * targetDistance
+          targetY = leaderPos.y + Math.sin(targetAngle) * targetDistance
         }
       } else if (role === 'hline') {
         // 리더 기준 좌우로 등간격 배치 (리더 방향 기준)
-        const centerIdx = followerIds.length / 2 - 0.5;
-        const myIdx = i;
-        const offset = (myIdx - centerIdx) * this.formationSpacing;
-        const perpX = Math.cos(leaderAngle + Math.PI / 2);
-        const perpY = Math.sin(leaderAngle + Math.PI / 2);
-        const forwardX = Math.cos(leaderAngle);
-        const forwardY = Math.sin(leaderAngle);
-        if (followerIds.length % 2 === 1 && myIdx === Math.floor(centerIdx + 0.5)) {
+        const centerIdx = followerIds.length / 2 - 0.5
+        const myIdx = i
+        const offset = (myIdx - centerIdx) * this.formationSpacing
+        const perpX = Math.cos(leaderAngle + Math.PI / 2)
+        const perpY = Math.sin(leaderAngle + Math.PI / 2)
+        const forwardX = Math.cos(leaderAngle)
+        const forwardY = Math.sin(leaderAngle)
+        if (
+          followerIds.length % 2 === 1 &&
+          myIdx === Math.floor(centerIdx + 0.5)
+        ) {
           // 홀수면 중앙은 리더 앞
-          targetX = leaderPos.x + forwardX * this.baseDistance;
-          targetY = leaderPos.y + forwardY * this.baseDistance;
-          targetDistance = this.baseDistance;
+          targetX = leaderPos.x + forwardX * this.baseDistance
+          targetY = leaderPos.y + forwardY * this.baseDistance
+          targetDistance = this.baseDistance
         } else {
-          targetX = leaderPos.x + perpX * offset;
-          targetY = leaderPos.y + perpY * offset;
-          targetDistance = Math.abs(offset);
+          targetX = leaderPos.x + perpX * offset
+          targetY = leaderPos.y + perpY * offset
+          targetDistance = Math.abs(offset)
         }
       } else {
         // 일자형: 리더 뒤쪽으로 일렬 정렬
