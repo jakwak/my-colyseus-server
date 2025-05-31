@@ -1,8 +1,8 @@
 import Matter from 'matter-js'
 import { matterToDefold, createNpcBody, CATEGORY_NPC, SCREEN_WIDTH, SCREEN_HEIGHT } from './physics'
-import { Npc } from '../schema/MatterRoomState'
+import { Npc, Player } from '../schema/MatterRoomState'
 import { MapSchema } from '@colyseus/schema'
-import { NpcFollowerManager } from './NpcFollowerManager'
+import { NpcFollowerManager, NpcFormationType } from './NpcFollowerManager'
 
 const MARGIN = 40;
 const MIN_X = MARGIN;
@@ -11,19 +11,20 @@ const MIN_Y = MARGIN;
 const MAX_Y = SCREEN_HEIGHT - MARGIN;
 const NPC_MOVE_RADIUS = 1500;
 const NPC_SPEED = 50;
-const RAYCAST_DISTANCE = 100; // 레이캐스트 거리를 100으로 증가
 
 export class NpcWanderManager {
   private world: Matter.World
   private stateNpcs: MapSchema<Npc>
+  private statePlayers: MapSchema<Player>
   private npcTargets: Map<string, { x: number; y: number }> // 각 NPC별 목표 지점
   private npcDirs: Map<string, { x: number; y: number }> // 각 NPC별 현재 방향
   private myNpcIds: Set<string> = new Set() // 이 매니저가 생성한 NPC ID들
   public followerManagers: NpcFollowerManager[] = [] // 각 그룹별 팔로워 매니저
 
-  constructor(world: Matter.World, stateNpcs: MapSchema<Npc>) {
+  constructor(world: Matter.World, stateNpcs: MapSchema<Npc>, statePlayers: MapSchema<Player>) {
     this.world = world
     this.stateNpcs = stateNpcs
+    this.statePlayers = statePlayers
     this.npcTargets = new Map()
     this.npcDirs = new Map()
   }
@@ -35,32 +36,75 @@ export class NpcWanderManager {
     return npcIds[Math.floor(Math.random() * npcIds.length)]
   }
 
-  // 레이캐스트로 장애물 감지
+  // 장애물(벽 등) 감지 함수
   private detectObstacles(npcBody: Matter.Body, dir: { x: number, y: number }): boolean {
     const start = npcBody.position;
-    const end = {
-      x: start.x + dir.x * RAYCAST_DISTANCE,
-      y: start.y + dir.y * RAYCAST_DISTANCE
-    };
+    const NUM_RAYS = 5;
+    const ANGLE_RANGE = Math.PI / 6; // 30도
+    const OBSTACLE_DISTANCE = 50;
+    const PLAYER_DISTANCE = 100;
+    let found = false;
+    const baseAngle = Math.atan2(dir.y, dir.x);
+    // 장애물 감지
+    for (let i = 0; i < NUM_RAYS; i++) {
+      const t = i / (NUM_RAYS - 1);
+      const angleOffset = (t - 0.5) * 2 * ANGLE_RANGE;
+      const rayAngle = baseAngle + angleOffset;
+      const end = {
+        x: start.x + Math.cos(rayAngle) * OBSTACLE_DISTANCE,
+        y: start.y + Math.sin(rayAngle) * OBSTACLE_DISTANCE
+      };
+      const collisions = Matter.Query.ray(
+        this.world.bodies.filter(body => 
+          body.id !== npcBody.id && !body.label.startsWith('npc_') && !body.label.startsWith('player_')
+        ),
+        start,
+        end,
+        10
+      );
 
-    // 레이캐스트로 충돌 검사 (자기 자신과 다른 NPC들 제외)
-    const collisions = Matter.Query.ray(
-      this.world.bodies.filter(body => 
-        body.id !== npcBody.id && // 자기 자신 제외
-        !body.label.startsWith('npc_') // NPC로 시작하는 모든 바디 제외
-      ),
-      start,
-      end,
-      1
-    );
-    return collisions.length > 0;
+      if (collisions.length > 0) found = true;
+    }
+
+    // 플레이어 감지
+    for (let i = 0; i < NUM_RAYS; i++) {
+      const t = i / (NUM_RAYS - 1);
+      const angleOffset = (t - 0.5) * 2 * ANGLE_RANGE;
+      const rayAngle = baseAngle + angleOffset;
+      const end = {
+        x: start.x + Math.cos(rayAngle) * PLAYER_DISTANCE,
+        y: start.y + Math.sin(rayAngle) * PLAYER_DISTANCE
+      };
+      const collisions = Matter.Query.ray(
+        this.world.bodies.filter(body => 
+          body.id !== npcBody.id && body.label.startsWith('player_')
+        ),
+        start,
+        end,
+        10
+      );
+      for (const col of collisions) {
+        if (col.bodyB && typeof col.bodyB.label === 'string' && col.bodyB.label.startsWith('player_')) {
+          const player = this.statePlayers.get(col.bodyB.label.replace('player_', ''));
+          if (player) {
+            console.log(`[NPCWander] 플레이어 감지: player 발견! label=${col.bodyB.label}`);
+            // 팔로워 매니저에 타겟 지정
+            for (const fm of this.followerManagers) {
+              fm.temporaryTarget = { x: player.x, y: SCREEN_HEIGHT - player.y };
+              fm.temporaryTargetActive = true;
+            }
+          }
+        }
+      }
+    }
+    return found;
   }
 
   // 장애물 회피를 위한 새로운 방향 계산
   private calculateAvoidanceDirection(currentDir: { x: number, y: number }): { x: number, y: number } {
     // 현재 방향에서 -60도 ~ +60도 사이로 랜덤하게 회전
     const angle = Math.atan2(currentDir.y, currentDir.x);
-    const randomAngle = (Math.random() * 2 - 1) * (Math.PI / 3); // -60도 ~ +60도
+    const randomAngle = (Math.random() * 2 - 1) * (Math.PI / 6); // -30도 ~ +30도
     const newAngle = angle + randomAngle;
     
     return {
@@ -93,8 +137,8 @@ export class NpcWanderManager {
       this.npcTargets.set(leader_id, this.getRandomTargetNear(x, y, NPC_MOVE_RADIUS, { x: 1, y: 0 }));
 
       if (followerCount && followerSize) {
-        const formationTypes: ("v" | "line" | "escort")[] = ["v", "line", "escort"];
-        const randomFormation = formationTypes[Math.floor(Math.random() * formationTypes.length)];
+        const formationTypes: NpcFormationType[] = ["v", "line", "escort", "scatter", "hline"];
+        const randomFormation = formationTypes[i % formationTypes.length];
         const followerManager = new NpcFollowerManager(this.world, this.stateNpcs, leader_id, randomFormation);
         followerManager.spawnFollowers(followerCount, followerSize);
         this.followerManagers.push(followerManager);

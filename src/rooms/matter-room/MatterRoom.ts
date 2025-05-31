@@ -3,10 +3,8 @@ import { Player, State, Npc, Bullet } from '../schema/MatterRoomState'
 import {
   createEngineAndWorld,
   addWalls,
-  createNpcBody,
   createPlayer,
   moveBody,
-  updatePhysics,
   matterToDefold,
   defoldToMatter,
   setBodyPosition,
@@ -31,23 +29,23 @@ export class MatterRoom extends Room<State> {
     addWalls(this.world)
 
     // 예시: wander NPC 3개, 각 NPC마다 팔로워 6개(size 10)씩 생성
-    this.npcWanderManager = new NpcWanderManager(this.world, this.state.npcs)
+    this.npcWanderManager = new NpcWanderManager(this.world, this.state.npcs, this.state.players)
 
     // 팔로워 매니저는 내부적으로 자동 생성/관리됨
     this.npcWanderManager.spawnNpcs(
       5, // wander NPC 개수
       25, // wander NPC 크기
-      5, // 각 wander NPC마다 팔로워 개수
+      4, // 각 wander NPC마다 팔로워 개수
       10 // 팔로워 크기
     )
 
-    // // 팔로워 매니저는 내부적으로 자동 생성/관리됨
-    // this.npcWanderManager.spawnNpcs(
-    //   5, // wander NPC 개수
-    //   25, // wander NPC 크기
-    //   3, // 각 wander NPC마다 팔로워 개수
-    //   10 // 팔로워 크기
-    // )
+    // 팔로워 매니저는 내부적으로 자동 생성/관리됨
+    this.npcWanderManager.spawnNpcs(
+      5, // wander NPC 개수
+      25, // wander NPC 크기
+      7, // 각 wander NPC마다 팔로워 개수
+      10 // 팔로워 크기
+    )
 
     // this.npcWanderManager.spawnNpcs(
     //   5, // wander NPC 개수
@@ -69,19 +67,17 @@ export class MatterRoom extends Room<State> {
     this.setSimulationInterval((deltaTime) => {
       Matter.Engine.update(this.engine, deltaTime)
 
-      const stateSize = JSON.stringify(this.state.toJSON()).length
-      console.log(`Current state size: ${stateSize} bytes`)
+      // const stateSize = JSON.stringify(this.state.toJSON()).length
+      // console.log(`Current state size: ${stateSize} bytes`)
 
       // === NPC 랜덤 이동 ===
       if (this.npcWanderManager) {
-        // tick마다 wander/follower 현황 출력 (간략)
-        //console.log(`[ROOM] tick: wanderCount=${this.npcWanderManager.myNpcIds ? this.npcWanderManager.myNpcIds.size : 'N/A'}, followerManagers=${this.npcWanderManager.followerManagers.length}`);
         this.npcWanderManager.moveAllNpcs(deltaTime)
       }
 
       // 플레이어 상태 업데이트
       this.world.bodies.forEach((body) => {
-        const player = this.state.players.get(body.label)
+        const player = this.state.players.get(body.label.replace('player_', ''))
         if (player) {
           const defoldPos = matterToDefold(body.position)
           player.x = defoldPos.x
@@ -133,7 +129,7 @@ export class MatterRoom extends Room<State> {
   private handleMove(client: Client, data: any) {
     const player = this.state.players.get(client.sessionId)
     if (player) {
-      const body = this.world.bodies.find((b) => b.label === client.sessionId)
+      const body = this.world.bodies.find((b) => b.label === "player_" + client.sessionId)
       if (body) {
         moveBody(body, data)
         const defoldPos = matterToDefold(body.position)

@@ -68,7 +68,7 @@ export function createPlayer(world: Matter.World, id: string, startPos?: { x: nu
     matterPos.y,
     10,  // 반지름
     { 
-      label: id,  // 플레이어 식별자
+      label: "player_" + id,  // 플레이어 식별자
       restitution: 0.9,  // 반발 계수 (1.0 미만으로 조정)
       friction: 0.1,  // 마찰 계수 
       frictionAir: 0.1,  // 공기 저항
@@ -135,14 +135,6 @@ export function moveBody(body: Matter.Body, direction: { x: number; y: number })
     x: direction.x * 10, 
     y: direction.y * 10 * -1
   });
-}
-
-// 패드 애니메이션 관련 상태 변수 (Room에서 관리 권장)
-// ... 필요시 Room에서 직접 구현 ...
-
-// 물리 업데이트
-export function updatePhysics(engine: Matter.Engine, delta: number) {
-  Matter.Engine.update(engine, delta);
 }
 
 // 좌표 설정 함수
