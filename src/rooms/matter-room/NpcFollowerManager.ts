@@ -266,16 +266,7 @@ export class NpcFollowerManager {
     const leaderBody = this.world.bodies.find((b) => b.label === this.leaderId)
     if (!leader || !leaderBody) return false
     const leaderPos = leaderBody.position
-    const leaderVelocity = leaderBody.velocity
-    const leaderSpeed = Math.sqrt(
-      leaderVelocity.x * leaderVelocity.x + leaderVelocity.y * leaderVelocity.y
-    )
-
-    // 리더의 이동 방향 계산
-    const leaderDirX = leaderSpeed > 0 ? leaderVelocity.x / leaderSpeed : 0
-    const leaderDirY = leaderSpeed > 0 ? -leaderVelocity.y / leaderSpeed : 0 // y축 반전
-    const leaderAngle = Math.atan2(leaderDirY, leaderDirX)
-
+    const leaderAngle = leaderBody.angle
     for (let i = 0; i < followerIds.length; i++) {
       const id = followerIds[i]
       const npc = this.npcs.get(id)
@@ -333,7 +324,7 @@ export class NpcFollowerManager {
 
     // 리더의 이동 방향 계산
     const leaderDirX = leaderSpeed > 0 ? leaderVelocity.x / leaderSpeed : 0
-    const leaderDirY = leaderSpeed > 0 ? -leaderVelocity.y / leaderSpeed : 0 // y축 반전
+    const leaderDirY = leaderSpeed > 0 ? leaderVelocity.y / leaderSpeed : 0
     const leaderAngle = Math.atan2(leaderDirY, leaderDirX)
 
     // 자신이 생성한 NPC만 이동
@@ -343,38 +334,6 @@ export class NpcFollowerManager {
       rightIdx = 0,
       boxIdx = 0,
       backIdx = 0
-
-    // escort(박스) 대형용 offset 계산 함수
-    function getBoxEscortOffsets(count: number, boxDistance: number) {
-      const offsets: { x: number; y: number }[] = []
-      const perSide = Math.floor(count / 4)
-      for (let side = 0; side < 4; side++) {
-        for (let j = 0; j < perSide; j++) {
-          const t = (j + 0.5) / perSide // 0~1 등분 (꼭짓점과 중간 모두 분산)
-          let x = 0,
-            y = 0
-          if (side === 0) {
-            // top
-            x = -boxDistance + t * 2 * boxDistance
-            y = -boxDistance
-          } else if (side === 1) {
-            // right
-            x = boxDistance
-            y = -boxDistance + t * 2 * boxDistance
-          } else if (side === 2) {
-            // bottom
-            x = boxDistance - t * 2 * boxDistance
-            y = boxDistance
-          } else if (side === 3) {
-            // left
-            x = -boxDistance
-            y = boxDistance - t * 2 * boxDistance
-          }
-          offsets.push({ x, y })
-        }
-      }
-      return offsets
-    }
 
     // 박스 대형용 오프셋 미리 계산
     let boxOffsets: { x: number; y: number }[] = []
@@ -472,6 +431,7 @@ export class NpcFollowerManager {
       if (this.returningToFormation) {
         if (this.allFollowersAtTarget(null)) {
           this.returningToFormation = false
+          // formation 복귀 완료 시점에 위치/속도 보정
           for (let j = 0; j < followerIds.length; j++) {
             const fid = followerIds[j]
             const followerBody2 = this.world.bodies.find((b) => b.label === fid)
@@ -490,10 +450,11 @@ export class NpcFollowerManager {
               this.formationSpacing,
               this.scatterTargets
             )
-            const matterPos = defoldToMatter(formationTarget)
-            Matter.Body.setPosition(followerBody2, matterPos)
+            // const matterPos = defoldToMatter(formationTarget)
+            // Matter.Body.setPosition(followerBody2, matterPos)
+            Matter.Body.setPosition(followerBody2, formationTarget)
             Matter.Body.setVelocity(followerBody2, { x: 0, y: 0 })
-            // state는 formationTarget(Defold/Colyseus)로 직접 설정
+            // NPC state를 formation target 위치로 직접 설정
             npc2.x = formationTarget.x
             npc2.y = formationTarget.y
           }
@@ -511,9 +472,9 @@ export class NpcFollowerManager {
             this.formationSpacing,
             this.scatterTargets
           )
-          const matterTarget = defoldToMatter(formationTarget)
-          targetX = matterTarget.x
-          targetY = matterTarget.y
+          // const matterTarget = defoldToMatter(formationTarget)
+          targetX = formationTarget.x
+          targetY = formationTarget.y
           targetDistance = Math.sqrt(
             (targetX - followerPos.x) * (targetX - followerPos.x) +
               (targetY - followerPos.y) * (targetY - followerPos.y)
