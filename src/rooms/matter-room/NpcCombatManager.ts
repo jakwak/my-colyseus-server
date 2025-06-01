@@ -17,13 +17,16 @@ export class NpcCombatManager {
   private bullets: MapSchema<Bullet>
   
   // 전투 설정
-  private detectionRange: number = 400 // 감지 범위
-  private shootingRange: number = 300 // 사격 범위
-  private shootCooldown: number = 100 // 1초 쿨다운
-  private bulletSpeed: number = 1
+  private detectionRange: number = 1000 // 감지 범위
+  private shootingRange: number = 800 // 사격 범위
+  private shootCooldown: number = 500 // 1초 쿨다운
+  private bulletSpeed: number = 5
   
   // NPC별 마지막 사격 시간 추적
   private lastShootTime: Map<string, number> = new Map()
+  
+  // NPC별 이전 위치 저장 (이동 방향 계산용)
+  private npcPreviousPositions: Map<string, { x: number, y: number }> = new Map()
   
   constructor(
     world: Matter.World,
@@ -37,17 +40,54 @@ export class NpcCombatManager {
     this.bullets = bullets
   }
 
-  // NPC 방향으로 레이캐스트하여 플레이어 감지
-  public detectPlayerInDirection(npcId: string): RaycastHit | null {
+  // NPC의 실제 이동 방향 계산
+  private getNpcMovementDirection(npcId: string): { x: number, y: number } | null {
+    const npc = this.npcs.get(npcId)
+    if (!npc) return null
+
+    const currentPos = { x: npc.x, y: npc.y }
+    const previousPos = this.npcPreviousPositions.get(npcId)
+    
+    if (!previousPos) {
+      // 이전 위치가 없으면 현재 위치를 저장하고 기본 방향 반환
+      this.npcPreviousPositions.set(npcId, currentPos)
+      return { x: npc.dirx || 1, y: npc.diry || 0 }
+    }
+
+    // 이동 벡터 계산
+    const deltaX = currentPos.x - previousPos.x
+    const deltaY = currentPos.y - previousPos.y
+    const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY)
+
+    // 이전 위치 업데이트
+    this.npcPreviousPositions.set(npcId, currentPos)
+
+    // 이동이 거의 없으면 기존 방향 사용
+    if (distance < 0.1) {
+      return { x: npc.dirx || 1, y: npc.diry || 0 }
+    }
+
+    // 정규화된 이동 방향 반환
+    return {
+      x: deltaX / distance,
+      y: deltaY / distance
+    }
+  }
+
+  // NPC 이동 방향으로 레이캐스트하여 플레이어 감지
+  public detectPlayerInMovementDirection(npcId: string): RaycastHit | null {
     const npc = this.npcs.get(npcId)
     if (!npc) return null
 
     const npcBody = this.world.bodies.find(b => b.label === npcId)
     if (!npcBody) return null
 
-    // NPC 위치와 방향
+    // NPC 위치와 실제 이동 방향
     const npcPos = { x: npc.x, y: SCREEN_HEIGHT - npc.y } // Matter 좌표계로 변환
-    const npcDirection = { x: npc.dirx || 1, y: -(npc.diry || 0) } // Y축 반전
+    const movementDirection = this.getNpcMovementDirection(npcId)
+    if (!movementDirection) return null
+
+    const npcDirection = { x: movementDirection.x, y: -movementDirection.y } // Y축 반전
 
     // 레이캐스트 끝점 계산
     const rayEnd = {
@@ -67,7 +107,6 @@ export class NpcCombatManager {
     let closestDistance = Infinity
 
     for (const collision of raycastResults) {
-
       const bodyLabel = collision.bodyA.label
       
       // 플레이어 바디인지 확인 (player_ 접두사 또는 sessionId)
@@ -101,10 +140,15 @@ export class NpcCombatManager {
     }
 
     return closestPlayerHit
+  }
 
+  // 기존 방향 기반 감지 (호환성 유지)
+  public detectPlayerInDirection(npcId: string): RaycastHit | null {
+    return this.detectPlayerInMovementDirection(npcId)
+  }
 
-  }  // NPC가 자신의 방향으로 총알 발사
-  public shootInDirection(npcId: string): string | null {
+  // NPC가 이동 방향으로 총알 발사
+  public shootInMovementDirection(npcId: string): string | null {
     const currentTime = Date.now()
     const lastShoot = this.lastShootTime.get(npcId) || 0
     
@@ -114,32 +158,36 @@ export class NpcCombatManager {
     const npc = this.npcs.get(npcId)
     if (!npc) return null
 
+    // NPC의 실제 이동 방향 가져오기
+    const movementDirection = this.getNpcMovementDirection(npcId)
+    if (!movementDirection) return null
+
     // 총알 생성
     const bulletId = `npc_bullet_${npcId}_${currentTime}_${Math.floor(Math.random() * 1000)}`
     
-    // NPC의 현재 방향 사용
-    const dirX = npc.dirx || 1
-    const dirY = npc.diry || 0
+    // 이동 방향 사용
+    const dirX = movementDirection.x
+    const dirY = movementDirection.y 
     
     // 총알 시작 위치 (NPC 앞쪽)
     const startX = npc.x + dirX * 20
     const startY = npc.y + dirY * 20
     
     // Matter.js 바디 생성 (Matter 좌표계)
-    const bulletBody = Matter.Bodies.circle(startX, SCREEN_HEIGHT - startY, 5, {
+    const bulletBody = Matter.Bodies.circle(startX, SCREEN_HEIGHT - startY, 3, {
       label: bulletId,
       isSensor: true,
       frictionAir: 0,
       collisionFilter: {
         category: CATEGORY_BULLET,
-        mask: CATEGORY_PLAYER
+        mask: CATEGORY_PLAYER | CATEGORY_WALL
       }
     })
     
-    // 속도 적용 (NPC 방향으로)
+    // 속도 적용 (NPC 이동 방향으로)
     Matter.Body.setVelocity(bulletBody, {
       x: dirX * this.bulletSpeed,
-      y: -dirY * this.bulletSpeed // Y축 반전
+      y: dirY * this.bulletSpeed // Y축 반전
     })
     
     Matter.World.add(this.world, bulletBody)
@@ -151,7 +199,7 @@ export class NpcCombatManager {
     bullet.x = startX
     bullet.y = startY
     bullet.dirx = dirX
-    bullet.diry = dirY * -1
+    bullet.diry = dirY
     bullet.power = 10
     bullet.velocity = this.bulletSpeed
     bullet.owner_id = npcId
@@ -161,22 +209,27 @@ export class NpcCombatManager {
     // 쿨다운 업데이트
     this.lastShootTime.set(npcId, currentTime)
     
-    console.log(`[NPC COMBAT] ${npcId}가 방향 (${dirX.toFixed(2)}, ${dirY.toFixed(2)})으로 총알 발사`)
+    console.log(`[NPC COMBAT] ${npcId}가 이동 방향 (${dirX.toFixed(2)}, ${dirY.toFixed(2)})으로 총알 발사`)
     
     return bulletId
+  }
+
+  // 기존 메서드 (호환성 유지)
+  public shootInDirection(npcId: string): string | null {
+    return this.shootInMovementDirection(npcId)
   }
 
   // 모든 NPC의 전투 AI 업데이트
   public updateCombatAI(deltaTime: number, npcIds: string[]) {
     npcIds.forEach(npcId => {
-      // NPC 방향으로 플레이어 감지
-      const detectedPlayer = this.detectPlayerInDirection(npcId)
+      // NPC 이동 방향으로 플레이어 감지
+      const detectedPlayer = this.detectPlayerInMovementDirection(npcId)
       
       if (detectedPlayer && detectedPlayer.distance <= this.shootingRange) {
-        // 사격 시도
-        this.shootInDirection(npcId)
+        // 이동 방향으로 사격 시도
+        this.shootInMovementDirection(npcId)
         
-        console.log(`[NPC COMBAT] ${npcId}가 ${detectedPlayer.playerId}를 감지하여 사격 (거리: ${detectedPlayer.distance.toFixed(1)})`)
+        console.log(`[NPC COMBAT] ${npcId}가 ${detectedPlayer.playerId}를 감지하여 이동 방향으로 사격 (거리: ${detectedPlayer.distance.toFixed(1)})`)
       }
     })
   }
@@ -212,21 +265,33 @@ export class NpcCombatManager {
     this.bulletSpeed = speed
   }
 
+  // NPC 위치 업데이트 (외부에서 호출)
+  public updateNpcPosition(npcId: string) {
+    const npc = this.npcs.get(npcId)
+    if (npc) {
+      this.npcPreviousPositions.set(npcId, { x: npc.x, y: npc.y })
+    }
+  }
+
   // 디버그용: 레이캐스트 시각화 데이터 반환
   public getDebugRaycastData(npcId: string): any {
     const npc = this.npcs.get(npcId)
     if (!npc) return null
 
     const npcPos = { x: npc.x, y: SCREEN_HEIGHT - npc.y }
-    const direction = { x: npc.dirx || 1, y: -(npc.diry || 0) }
+    const movementDirection = this.getNpcMovementDirection(npcId)
+    const direction = movementDirection ? 
+      { x: movementDirection.x, y: -movementDirection.y } : 
+      { x: npc.dirx || 1, y: -(npc.diry || 0) }
     
     const raycastResults = this.raycastInDirection(npcPos, direction)
-    const detectedPlayer = this.detectPlayerInDirection(npcId)
+    const detectedPlayer = this.detectPlayerInMovementDirection(npcId)
     
     return {
       npcId,
       position: { x: npc.x, y: npc.y },
-      direction: { x: npc.dirx, y: npc.diry },
+      movementDirection: movementDirection,
+      staticDirection: { x: npc.dirx, y: npc.diry },
       detectionRange: this.detectionRange,
       raycastHits: raycastResults.length,
       detectedPlayer: detectedPlayer ? {

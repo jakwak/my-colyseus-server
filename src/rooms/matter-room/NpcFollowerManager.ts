@@ -63,9 +63,9 @@ export class NpcFollowerManager extends NpcBaseController {
     if (bullets && statePlayers) {
       this.combatManager = new NpcCombatManager(world, npcs, statePlayers, bullets)
       // 전투 설정 조정
-      this.combatManager.setDetectionRange(180)
-      this.combatManager.setShootingRange(120)
-      this.combatManager.setShootCooldown(800) // 0.8초 쿨다운
+      // this.combatManager.setDetectionRange(180)
+      // this.combatManager.setShootingRange(120)
+      // this.combatManager.setShootCooldown(800) // 0.8초 쿨다운
     }
   }
 
