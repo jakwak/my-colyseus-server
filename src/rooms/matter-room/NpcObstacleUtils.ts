@@ -7,7 +7,7 @@ export function detectObstacles(world: Matter.World, npcBody: Matter.Body, dir: 
   const start = npcBody.position;
   const NUM_RAYS = 5;
   const ANGLE_RANGE = Math.PI / 6; // 30도
-  const OBSTACLE_DISTANCE = 50;
+  const OBSTACLE_DISTANCE = 100;
   let found = false;
   const baseAngle = Math.atan2(dir.y, dir.x);
   // 장애물 감지

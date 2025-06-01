@@ -35,7 +35,7 @@ export class MatterRoom extends Room<State> {
     this.npcWanderManager.spawnNpcs(
       5, // wander NPC 개수
       25, // wander NPC 크기
-      5, // 각 wander NPC마다 팔로워 개수
+      10, // 각 wander NPC마다 팔로워 개수
       10 // 팔로워 크기
     )
 
@@ -43,7 +43,7 @@ export class MatterRoom extends Room<State> {
     this.npcWanderManager.spawnNpcs(
       5, // wander NPC 개수
       25, // wander NPC 크기
-      7, // 각 wander NPC마다 팔로워 개수
+      5, // 각 wander NPC마다 팔로워 개수
       10 // 팔로워 크기
     )
 

@@ -156,6 +156,16 @@ export class NpcWanderManager {
         y: (dirY * NPC_SPEED) / 60,
       });
 
+      // 천천히 회전하도록 보간 적용
+      const currentAngle = npcBody.angle;
+      const targetAngle = Math.atan2(dirY, dirX);
+      let angleDiff = targetAngle - currentAngle;
+      while (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
+      while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
+      const lerpFactor = 0.1;
+      const newAngle = currentAngle + angleDiff * lerpFactor;
+      Matter.Body.setAngle(npcBody, newAngle);
+
       // State 동기화
       const defoldPos = matterToDefold(npcBody.position);
       npc.x = defoldPos.x;
