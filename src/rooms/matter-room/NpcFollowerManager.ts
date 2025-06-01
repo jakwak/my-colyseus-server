@@ -1,5 +1,5 @@
 import Matter from 'matter-js'
-import { Npc } from '../schema/MatterRoomState'
+import { Npc, Player } from '../schema/MatterRoomState'
 import {
   createNpcBody,
   CATEGORY_NPC,
@@ -20,6 +20,7 @@ export type NpcFormationType = 'v' | 'line' | 'escort' | 'scatter' | 'hline'
 export class NpcFollowerManager {
   private world: Matter.World
   private npcs: MapSchema<Npc>
+  public statePlayers: MapSchema<Player> | null = null;
   public leaderId: string
   public myNpcIds: Set<string> = new Set() // 이 매니저가 생성한 NPC ID들
   private npcDirs: Map<string, { x: number; y: number }> = new Map() // 각 NPC별 현재 방향
@@ -29,11 +30,12 @@ export class NpcFollowerManager {
     'left' | 'right' | 'center' | 'front' | 'back' | 'box' | 'scatter' | 'hline'
   > = new Map()
   public scatterTargets: Map<string, { x: number; y: number }> = new Map()
-  public temporaryTarget: { x: number; y: number } | null = null
+  public temporaryTarget: { x: number; y: number } | null = null // (이전 호환)
   public temporaryTargetActive: boolean = false
   public returningToFormation: boolean = false
   public tempTargetOffsets: Map<string, { x: number; y: number }> = new Map()
   public temporaryTargetActivatedAt: number | null = null
+  public temporaryTargetPlayerId: string | null = null;
 
   // 직접 수정 가능한 속성들
   formationAngle: number = Math.PI / 4 // 45도 각도 (0 ~ π/2)
@@ -305,6 +307,15 @@ export class NpcFollowerManager {
 
   // 임시 타겟 이동 처리
   private moveToTemporaryTarget(id: string, followerBody: Matter.Body, npc: Npc, leaderAngle: number, leaderSpeed: number) {
+    // 플레이어 추적: 플레이어의 현재 위치를 계속 참조
+    let targetX = 0, targetY = 0;
+    if (this.temporaryTargetPlayerId && this.statePlayers) {
+      const player = this.statePlayers.get(this.temporaryTargetPlayerId);
+      if (player) {
+        targetX = player.x;
+        targetY = SCREEN_HEIGHT - player.y;
+      }
+    }
     // 팔로워별 임시 목표 오프셋이 없으면 생성
     let offset = this.tempTargetOffsets.get(id);
     if (!offset) {
@@ -314,8 +325,8 @@ export class NpcFollowerManager {
       this.tempTargetOffsets.set(id, offset);
     }
     const target = {
-      x: (this.temporaryTarget?.x || 0) + offset.x,
-      y: (this.temporaryTarget?.y || 0) + offset.y,
+      x: targetX + offset.x,
+      y: targetY + offset.y,
     };
     const distanceToTarget = this.moveFollowerToTarget(followerBody, npc, target, leaderAngle, leaderSpeed);
     // 목표점에 도달하면 새로운 오프셋으로 갱신
@@ -391,7 +402,7 @@ export class NpcFollowerManager {
           vIndex = 0; // center
         }
       }
-      if (this.temporaryTargetActive && this.temporaryTarget) {
+      if (this.temporaryTargetActive && this.temporaryTargetPlayerId) {
         this.moveToTemporaryTarget(id, followerBody, npc, leaderAngle, leaderSpeed);
         continue;
       }

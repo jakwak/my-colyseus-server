@@ -60,6 +60,7 @@ export class NpcWanderManager {
         const formationTypes: NpcFormationType[] = ["v", "line", "escort", "scatter", "hline"];
         const randomFormation = formationTypes[i % formationTypes.length];
         const followerManager = new NpcFollowerManager(this.world, this.stateNpcs, leader_id, randomFormation);
+        followerManager.statePlayers = this.statePlayers;
         followerManager.spawnFollowers(followerCount, followerSize);
         this.followerManagers.push(followerManager);
       }
@@ -82,35 +83,29 @@ export class NpcWanderManager {
       // ===== 플레이어 감지: 전방 -45~+45도(부채꼴) 내에 플레이어가 있으면 임시 타겟 지정 =====
       const NPC_PLAYER_DETECT_DISTANCE = 200;
       const NPC_PLAYER_DETECT_ANGLE = Math.PI / 4; // 45도
-      let foundPlayer = false;
-      let foundPlayerPos: { x: number, y: number } | null = null;
+      let foundPlayer: string | null = null;
       for (const [playerId, player] of this.statePlayers.entries()) {
-        // 플레이어가 실제로 존재하는지 확인
         if (!player) continue;
-        // NPC(월드) 좌표계로 변환
         const playerMatterY = typeof player.y === 'number' ? SCREEN_HEIGHT - player.y : 0;
         const dx = player.x - npcBody.position.x;
         const dy = playerMatterY - npcBody.position.y;
         const dist = Math.sqrt(dx * dx + dy * dy);
         if (dist > NPC_PLAYER_DETECT_DISTANCE) continue;
-        // NPC의 현재 이동 방향과 플레이어 방향의 각도 차이
         const npcAngle = Math.atan2(dir.y, dir.x);
         const toPlayerAngle = Math.atan2(dy, dx);
         let angleDiff = toPlayerAngle - npcAngle;
-        // -PI~PI로 정규화
         while (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
         while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
         if (Math.abs(angleDiff) <= NPC_PLAYER_DETECT_ANGLE) {
-          foundPlayer = true;
-          foundPlayerPos = { x: player.x, y: playerMatterY };
+          foundPlayer = playerId;
           break;
         }
       }
-      if (foundPlayer) {
-        // 이 NPC가 리더인 팔로워 매니저에 임시 타겟 지정
+      if (foundPlayer !== null) {
+        // 이 NPC가 리더인 팔로워 매니저에 임시 타겟(플레이어 ID) 지정
         for (const fm of this.followerManagers) {
           if (fm.leaderId === id && !fm.temporaryTargetActive) {
-            fm.temporaryTarget = foundPlayerPos;
+            fm.temporaryTargetPlayerId = foundPlayer;
             fm.temporaryTargetActive = true;
             fm.temporaryTargetActivatedAt = Date.now();
             fm.returningToFormation = false;
@@ -179,12 +174,34 @@ export class NpcWanderManager {
 
     // 각 그룹별 팔로워 이동
     for (const fm of this.followerManagers) {
-      // 임시 타겟 활성화 후 5초가 지나면 formation 복귀
-      if (fm.temporaryTargetActive && fm.temporaryTargetActivatedAt && Date.now() - fm.temporaryTargetActivatedAt > 5000) {
+      // 임시 타겟 활성화 후 10초가 지나거나, 플레이어와의 거리가 300 이상이면 formation 복귀
+      let shouldReturn = false;
+      if (fm.temporaryTargetActive && fm.temporaryTargetActivatedAt) {
+        // 10초 경과
+        if (Date.now() - fm.temporaryTargetActivatedAt > 10000) {
+          shouldReturn = true;
+        }
+        // 플레이어와 거리 300 이상
+        if (fm.temporaryTargetPlayerId && this.statePlayers) {
+          const player = this.statePlayers.get(fm.temporaryTargetPlayerId);
+          const leaderBody = this.world.bodies.find((b) => b.label === fm.leaderId);
+          if (player && leaderBody) {
+            const dx = player.x - leaderBody.position.x;
+            const dy = (SCREEN_HEIGHT - player.y) - leaderBody.position.y;
+            if (Math.sqrt(dx * dx + dy * dy) > 300) {
+              shouldReturn = true;
+            }
+          } else {
+            shouldReturn = true; // 플레이어가 없어진 경우도 복귀
+          }
+        }
+      }
+      if (shouldReturn) {
         fm.temporaryTargetActive = false;
         fm.returningToFormation = true;
         fm.tempTargetOffsets.clear();
         fm.temporaryTargetActivatedAt = null;
+        fm.temporaryTargetPlayerId = null;
       }
       fm.moveAllFollowers(deltaTime);
     }

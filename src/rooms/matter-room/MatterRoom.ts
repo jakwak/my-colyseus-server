@@ -12,7 +12,6 @@ import {
 } from './physics'
 import Matter from 'matter-js'
 import { NpcWanderManager } from './NpcWanderManager'
-import { NpcFollowerManager } from './NpcFollowerManager'
 
 export class MatterRoom extends Room<State> {
   // 디버그 모드 (true면 물리 바디 정보 전송)
@@ -67,8 +66,8 @@ export class MatterRoom extends Room<State> {
     this.setSimulationInterval((deltaTime) => {
       Matter.Engine.update(this.engine, deltaTime)
 
-      const stateSize = JSON.stringify(this.state.toJSON()).length
-      console.log(`Current state size: ${stateSize} bytes`)
+      // const stateSize = JSON.stringify(this.state.toJSON()).length
+      // console.log(`Current state size: ${stateSize} bytes`)
 
       // === NPC 랜덤 이동 ===
       if (this.npcWanderManager) {
