@@ -28,7 +28,7 @@ export class MatterRoom extends Room<State> {
     addWalls(this.world)
 
     // 예시: wander NPC 3개, 각 NPC마다 팔로워 6개(size 10)씩 생성
-    this.npcWanderManager = new NpcWanderManager(this.world, this.state.npcs, this.state.players)
+    this.npcWanderManager = new NpcWanderManager(this.world, this.state.npcs, this.state.players, this.state.bullets)
 
     // 팔로워 매니저는 내부적으로 자동 생성/관리됨
     this.npcWanderManager.spawnNpcs(
@@ -38,20 +38,20 @@ export class MatterRoom extends Room<State> {
       10 // 팔로워 크기
     )
 
-    // 팔로워 매니저는 내부적으로 자동 생성/관리됨
-    this.npcWanderManager.spawnNpcs(
-      5, // wander NPC 개수
-      25, // wander NPC 크기
-      3, // 각 wander NPC마다 팔로워 개수
-      10 // 팔로워 크기
-    )
+    // // 팔로워 매니저는 내부적으로 자동 생성/관리됨
+    // this.npcWanderManager.spawnNpcs(
+    //   5, // wander NPC 개수
+    //   25, // wander NPC 크기
+    //   3, // 각 wander NPC마다 팔로워 개수
+    //   10 // 팔로워 크기
+    // )
 
-    this.npcWanderManager.spawnNpcs(
-      5, // wander NPC 개수
-      25, // wander NPC 크기
-      8, // 각 wander NPC마다 팔로워 개수
-      10 // 팔로워 크기
-    )
+    // this.npcWanderManager.spawnNpcs(
+    //   5, // wander NPC 개수
+    //   25, // wander NPC 크기
+    //   8, // 각 wander NPC마다 팔로워 개수
+    //   10 // 팔로워 크기
+    // )
 
     this.onMessage('move', this.handleMove.bind(this))
     this.onMessage('position_sync', this.handlePositionSync.bind(this))
@@ -115,7 +115,6 @@ export class MatterRoom extends Room<State> {
       }
     })
   }
-
   // MatterRoom.ts에 추가할 함수
   private handleBulletCollision(bulletId: string, npcId: string) {
     const bullet = this.state.bullets.get(bulletId)

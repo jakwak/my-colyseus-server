@@ -1,8 +1,7 @@
 import Matter from 'matter-js'
-import { Npc, Player } from '../schema/MatterRoomState'
+import { Bullet, Npc, Player } from '../schema/MatterRoomState'
 import {
   createNpcBody,
-  CATEGORY_NPC,
   SCREEN_WIDTH,
   SCREEN_HEIGHT,
 } from './physics'
@@ -13,6 +12,7 @@ import {
   getBoxEscortOffsets,
 } from './NpcFormationUtils'
 import { NpcBaseController } from './NpcBaseController'
+import { NpcCombatManager } from './NpcCombatManager'
 
 const MARGIN = 40
 
@@ -36,6 +36,10 @@ export class NpcFollowerManager extends NpcBaseController {
   public temporaryTargetActivatedAt: number | null = null
   public temporaryTargetPlayerId: string | null = null;
 
+  // 전투 시스템 추가
+  private combatManager: NpcCombatManager | null = null
+  public combatEnabled: boolean = true // 전투 활성화 여부
+
   // 직접 수정 가능한 속성들
   formationAngle: number = Math.PI / 4 // 45도 각도 (0 ~ π/2)
   baseDistance: number = 50 // 기본 간격 (50 ~ 300)
@@ -47,12 +51,22 @@ export class NpcFollowerManager extends NpcBaseController {
     npcs: MapSchema<Npc>,
     leaderId: string,
     formationType: NpcFormationType = 'v',
-    statePlayers?: MapSchema<Player>
+    statePlayers?: MapSchema<Player>,
+    bullets?: MapSchema<Bullet>
   ) {
     super(world, npcs, statePlayers as MapSchema<Player>);
     this.leaderId = leaderId;
     this.formationType = formationType;
     if (statePlayers) this.statePlayers = statePlayers;
+
+    // 전투 매니저 초기화
+    if (bullets && statePlayers) {
+      this.combatManager = new NpcCombatManager(world, npcs, statePlayers, bullets)
+      // 전투 설정 조정
+      this.combatManager.setDetectionRange(180)
+      this.combatManager.setShootingRange(120)
+      this.combatManager.setShootCooldown(800) // 0.8초 쿨다운
+    }
   }
 
   spawnFollowers(count: number, size: number) {
@@ -368,6 +382,7 @@ export class NpcFollowerManager extends NpcBaseController {
     const leaderSpeed = Math.sqrt(leaderVelocity.x * leaderVelocity.x + leaderVelocity.y * leaderVelocity.y);
     const leaderAngle = Math.atan2(leaderVelocity.y, leaderVelocity.x);
     const followerIds = Array.from(this.myNpcIds);
+    
 
     // V자 대형 좌우 인덱스 계산을 위한 역할 배열 준비
     let vRoles: ('left' | 'right' | 'center')[] = [];
@@ -412,6 +427,27 @@ export class NpcFollowerManager extends NpcBaseController {
       }
       this.moveToRoleTarget(id, vIndex, role, followerBody, npc, followerIds, leaderPos, leaderAngle, leaderSpeed);
     }
+
+    // 전투 AI 업데이트 (이동 후에 수행)
+    if (this.combatEnabled && this.combatManager) {
+      // 리더도 전투에 참여
+      const allCombatNpcs = [this.leaderId, ...followerIds]
+      this.combatManager.updateCombatAI(deltaTime, allCombatNpcs)
+    }
+  }
+
+
+  // 전투 시스템 제어 메서드들
+  public enableCombat() {
+    this.combatEnabled = true
+  }
+
+  public disableCombat() {
+    this.combatEnabled = false
+  }
+
+  public getCombatManager(): NpcCombatManager | null {
+    return this.combatManager
   }
 
   public getFollowerCount(): number {

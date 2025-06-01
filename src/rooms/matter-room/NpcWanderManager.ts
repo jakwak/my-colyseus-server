@@ -1,6 +1,6 @@
 import Matter from 'matter-js'
 import { matterToDefold, createNpcBody, CATEGORY_NPC, SCREEN_WIDTH, SCREEN_HEIGHT } from './physics'
-import { Npc, Player } from '../schema/MatterRoomState'
+import { Bullet, Npc, Player } from '../schema/MatterRoomState'
 import { MapSchema } from '@colyseus/schema'
 import { NpcFollowerManager, NpcFormationType } from './NpcFollowerManager'
 import { detectObstacles, calculateAvoidanceDirection } from './NpcObstacleUtils'
@@ -16,10 +16,12 @@ export class NpcWanderManager extends NpcBaseController {
   private myNpcIds: Set<string> = new Set(); // 이 매니저가 생성한 NPC ID들
   public followerManagers: NpcFollowerManager[] = [] // 각 그룹별 팔로워 매니저
 
-  constructor(world: Matter.World, npcs: MapSchema<Npc>, statePlayers: MapSchema<Player>) {
-    super(world, npcs, statePlayers);
-  }
+  private bullets: MapSchema<Bullet>;
 
+  constructor(world: Matter.World, npcs: MapSchema<Npc>, statePlayers: MapSchema<Player>, bullets: MapSchema<Bullet>) {
+    super(world, npcs, statePlayers);
+    this.bullets = bullets;
+  }
   // 임의의 NPC ID 반환
   public getRandomNpcId(): string | null {
     const npcIds = Array.from(this.myNpcIds)
@@ -51,7 +53,7 @@ export class NpcWanderManager extends NpcBaseController {
       if (followerCount && followerSize) {
         const formationTypes: NpcFormationType[] = ["v", "line", "escort", "scatter", "hline"];
         const randomFormation = formationTypes[i % formationTypes.length];
-        const followerManager = new NpcFollowerManager(this.world, this.npcs, leader_id, randomFormation);
+        const followerManager = new NpcFollowerManager(this.world, this.npcs, leader_id, randomFormation, this.statePlayers, this.bullets);
         followerManager.statePlayers = this.statePlayers;
         followerManager.spawnFollowers(followerCount, followerSize);
         this.followerManagers.push(followerManager);
@@ -70,8 +72,9 @@ export class NpcWanderManager extends NpcBaseController {
       if (!npcBody) continue;
       let target = this.npcTargets.get(id);
       let dir = this.npcDirs.get(id) || { x: 1, y: 0 };
+
       // ===== 플레이어 감지: 전방 -45~+45도(부채꼴) 내에 플레이어가 있으면 임시 타겟 지정 =====
-      const NPC_PLAYER_DETECT_DISTANCE = 200;
+      const NPC_PLAYER_DETECT_DISTANCE = 400;
       const NPC_PLAYER_DETECT_ANGLE = Math.PI / 4; // 45도
       let foundPlayer: string | null = null;
       for (const [playerId, player] of this.statePlayers.entries()) {
