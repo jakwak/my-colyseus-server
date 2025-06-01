@@ -12,14 +12,13 @@ import {
   getFormationTargetForFollower,
   getBoxEscortOffsets,
 } from './NpcFormationUtils'
+import { NpcBaseController } from './NpcBaseController'
 
 const MARGIN = 40
 
 export type NpcFormationType = 'v' | 'line' | 'escort' | 'scatter' | 'hline'
 
-export class NpcFollowerManager {
-  private world: Matter.World
-  private npcs: MapSchema<Npc>
+export class NpcFollowerManager extends NpcBaseController {
   public statePlayers: MapSchema<Player> | null = null;
   public leaderId: string
   public myNpcIds: Set<string> = new Set() // 이 매니저가 생성한 NPC ID들
@@ -47,12 +46,13 @@ export class NpcFollowerManager {
     world: Matter.World,
     npcs: MapSchema<Npc>,
     leaderId: string,
-    formationType: NpcFormationType = 'v'
+    formationType: NpcFormationType = 'v',
+    statePlayers?: MapSchema<Player>
   ) {
-    this.world = world
-    this.npcs = npcs
-    this.leaderId = leaderId
-    this.formationType = formationType
+    super(world, npcs, statePlayers as MapSchema<Player>);
+    this.leaderId = leaderId;
+    this.formationType = formationType;
+    if (statePlayers) this.statePlayers = statePlayers;
   }
 
   spawnFollowers(count: number, size: number) {

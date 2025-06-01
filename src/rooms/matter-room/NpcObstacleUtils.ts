@@ -21,7 +21,7 @@ export function detectObstacles(world: Matter.World, npcBody: Matter.Body, dir: 
     };
     const collisions = Matter.Query.ray(
       world.bodies.filter(body => 
-        body.id !== npcBody.id && !body.label.startsWith('npc_') // && !body.label.startsWith('player_')
+        body.id !== npcBody.id && !body.label.startsWith('npc_') // npc_로 시작하는 바디도 장애물에서 제외
       ),
       start,
       end,

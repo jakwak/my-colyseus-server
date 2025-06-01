@@ -32,19 +32,19 @@ export class MatterRoom extends Room<State> {
 
     // 팔로워 매니저는 내부적으로 자동 생성/관리됨
     this.npcWanderManager.spawnNpcs(
-      5, // wander NPC 개수
+      1, // wander NPC 개수
       25, // wander NPC 크기
       10, // 각 wander NPC마다 팔로워 개수
       10 // 팔로워 크기
     )
 
-    // 팔로워 매니저는 내부적으로 자동 생성/관리됨
-    this.npcWanderManager.spawnNpcs(
-      5, // wander NPC 개수
-      25, // wander NPC 크기
-      5, // 각 wander NPC마다 팔로워 개수
-      10 // 팔로워 크기
-    )
+    // // 팔로워 매니저는 내부적으로 자동 생성/관리됨
+    // this.npcWanderManager.spawnNpcs(
+    //   5, // wander NPC 개수
+    //   25, // wander NPC 크기
+    //   5, // 각 wander NPC마다 팔로워 개수
+    //   10 // 팔로워 크기
+    // )
 
     // this.npcWanderManager.spawnNpcs(
     //   5, // wander NPC 개수
