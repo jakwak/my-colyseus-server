@@ -1,6 +1,6 @@
 import { SCREEN_WIDTH, SCREEN_HEIGHT } from './physics';
 
-const MARGIN = 40;
+const MARGIN = 80;
 const MIN_X = MARGIN;
 const MAX_X = SCREEN_WIDTH - MARGIN;
 const MIN_Y = MARGIN;

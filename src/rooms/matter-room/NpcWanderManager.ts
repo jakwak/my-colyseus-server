@@ -8,7 +8,7 @@ import { getRandomTargetNear } from './NpcTargetUtils'
 import { NpcBaseController } from './NpcBaseController'
 
 const NPC_MOVE_RADIUS = 1500;
-const NPC_SPEED = 30;
+const NPC_SPEED = 50;
 
 export class NpcWanderManager extends NpcBaseController {
   private npcTargets: Map<string, { x: number; y: number }> = new Map(); // 각 NPC별 목표 지점
@@ -61,7 +61,9 @@ export class NpcWanderManager extends NpcBaseController {
 
   // 모든 NPC 이동
   public moveAllNpcs(deltaTime: number) {
+    let loopCount = 0;
     for (const id of this.myNpcIds) {
+      loopCount++;
       const npc = this.npcs.get(id);
       if (!npc) continue;
       const npcBody = this.world.bodies.find((b) => b.label === id);
@@ -106,8 +108,16 @@ export class NpcWanderManager extends NpcBaseController {
         if (angleDiff < Math.PI / 2) {
           dir = newDir;
           this.npcDirs.set(id, dir);
-          target = getRandomTargetNear(npcBody.position.x, npcBody.position.y, NPC_MOVE_RADIUS, dir);
-          this.npcTargets.set(id, target);
+          // 벽 근처라면 맵 중앙 쪽으로 목표 강제 이동
+          const MARGIN = 80;
+          if (npcBody.position.x < MARGIN*1.5 || npcBody.position.x > SCREEN_WIDTH - MARGIN*1.5 ||
+              npcBody.position.y < MARGIN*1.5 || npcBody.position.y > SCREEN_HEIGHT - MARGIN*1.5) {
+            target = { x: SCREEN_WIDTH/2, y: SCREEN_HEIGHT/2 };
+            this.npcTargets.set(id, target);
+          } else {
+            target = getRandomTargetNear(npcBody.position.x, npcBody.position.y, NPC_MOVE_RADIUS, dir);
+            this.npcTargets.set(id, target);
+          }
         }
       }
       if (!target) {
@@ -120,15 +130,18 @@ export class NpcWanderManager extends NpcBaseController {
       if (dist < 10) {
         const curDir = dist > 0.01 ? { x: dx / dist, y: dy / dist } : dir;
         this.npcDirs.set(id, curDir);
-        target = getRandomTargetNear(npcBody.position.x, npcBody.position.y, NPC_MOVE_RADIUS, curDir);
-        this.npcTargets.set(id, target);
+        const newTarget = getRandomTargetNear(npcBody.position.x, npcBody.position.y, NPC_MOVE_RADIUS, curDir);
+        this.npcTargets.set(id, newTarget);
         continue;
       }
-      this.moveNpcToTarget(id, target, { speed: 30 });
+      this.moveNpcToTarget(id, target, { speed: NPC_SPEED });
       const dx2 = target.x - npcBody.position.x;
       const dy2 = target.y - npcBody.position.y;
       const dist2 = Math.sqrt(dx2 * dx2 + dy2 * dy2);
       this.npcDirs.set(id, { x: dx2 / (dist2 || 1), y: dy2 / (dist2 || 1) });
+      if (loopCount > 1000) {
+        break;
+      }
     }
     for (const fm of this.followerManagers) {
       let shouldReturn = false;
@@ -145,8 +158,6 @@ export class NpcWanderManager extends NpcBaseController {
             if (Math.sqrt(dx * dx + dy * dy) > 500) {
               shouldReturn = true;
             }
-          } else {
-            shouldReturn = true;
           }
         }
       }
