@@ -80,14 +80,21 @@ export function getFormationTargetForFollower(
     if (role === 'left' || role === 'right') {
       const isLeftSide = role === 'left';
       const formationAng = isLeftSide ? formationAngle : -formationAngle;
-      // leftIdx/rightIdx는 외부에서 관리해야 하지만, followerIds에서 left/right 순서대로 index를 구함
-      let index = 0;
-      for (let k = 0; k < i; k++) {
-        if ((isLeftSide && followerIds[k] !== id && role === 'left') || (!isLeftSide && followerIds[k] !== id && role === 'right')) {
-          index++;
-        }
+      
+      // 전체 follower 수와 현재 인덱스를 기반으로 side 내 순서 계산
+      const isOdd = followerIds.length % 2 === 1;
+      const centerIdx = isOdd ? Math.floor(followerIds.length / 2) : -1;
+      
+      // center를 제외한 실제 인덱스 계산
+      let adjustedIndex = i;
+      if (isOdd && i > centerIdx) {
+        adjustedIndex = i - 1;  // center 이후는 1씩 감소
       }
-      const targetDistance = baseDistance + index * formationSpacing;
+      
+      // 같은 side 내에서의 순서 (0, 1, 2...)
+      const sideIndex = Math.floor(adjustedIndex / 2);
+      
+      const targetDistance = baseDistance + sideIndex * formationSpacing;
       const targetAngle = leaderAngle + Math.PI + formationAng;
       return { x: leaderPos.x + Math.cos(targetAngle) * targetDistance, y: leaderPos.y + Math.sin(targetAngle) * targetDistance };
     }
