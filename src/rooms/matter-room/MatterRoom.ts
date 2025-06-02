@@ -19,6 +19,8 @@ export class MatterRoom extends Room<State> {
   private engine: Matter.Engine
   private world: Matter.World
   private npcWanderManager: NpcWanderManager | null = null
+  private cleanupTimer?: NodeJS.Timeout  // 방 정리 지연 타이머
+  private isDisposing: boolean = false   // 방 정리 중인지 체크
 
   onCreate() {
     this.state = new State()
@@ -226,6 +228,13 @@ export class MatterRoom extends Room<State> {
     client: Client,
     options?: { x?: number; y?: number; username?: string }
   ) {
+    // 새 플레이어가 들어오면 방 정리 타이머 취소
+    if (this.cleanupTimer) {
+      console.log('새 플레이어 입장으로 방 정리 타이머를 취소합니다.')
+      clearTimeout(this.cleanupTimer)
+      this.cleanupTimer = undefined
+    }
+    
     // 클라이언트에서 전달한 시작 위치 사용 (없으면 디폴트)
     const startPos =
       options && options.x !== undefined && options.y !== undefined
@@ -253,21 +262,46 @@ export class MatterRoom extends Room<State> {
   }
 
   onLeave(client: Client) {
+    // 이미 방이 정리 중이면 중복 처리 방지
+    if (this.isDisposing) {
+      console.log('방이 이미 정리 중입니다.')
+      return
+    }
+
+    console.log(`플레이어 ${client.sessionId} 퇴장 시작`)
+    
     // State의 메서드로 색상 반환
     const player = this.state.players.get(client.sessionId)
     if (player && player.color) {
       this.state.returnColorToPool(player.color)
     }
-    const body = this.world.bodies.find((b) => b.label === client.sessionId)
+    
+    // 올바른 라벨로 플레이어 바디 찾기 및 제거
+    const body = this.world.bodies.find((b) => b.label === `player_${client.sessionId}`)
     if (body) {
-      Matter.World.remove(this.world, body)
+      try {
+        Matter.World.remove(this.world, body)
+        console.log(`플레이어 ${client.sessionId} 물리 바디 제거됨`)
+      } catch (error) {
+        console.error(`플레이어 ${client.sessionId} 바디 제거 중 오류:`, error)
+      }
     }
+    
+    // 플레이어가 소유한 총알들 제거
+    const playerBullets = Array.from(this.state.bullets.entries())
+      .filter(([_, bullet]) => bullet.owner_id === client.sessionId)
+    
+    for (const [bulletId, _] of playerBullets) {
+      this.removeBullet(bulletId)
+    }
+    
+    // 플레이어 상태에서 제거
     this.state.players.delete(client.sessionId)
+    console.log(`플레이어 ${client.sessionId} 상태에서 제거됨`)
 
-    // 모든 플레이어가 나가면 방 삭제
+    // 모든 플레이어가 나가면 지연 삭제 스케줄링
     if (this.state.players.size === 0) {
-      console.log('모든 플레이어가 나가서 방을 삭제합니다.')
-      this.disconnect() // Colyseus Room의 dispose()를 호출하여 방 삭제
+      this.scheduleRoomCleanup()
     }
   }
 
@@ -296,5 +330,85 @@ export class MatterRoom extends Room<State> {
     // NPC 상태에서 제거
     this.state.npcs.delete(npcId)
     console.log(`[NPC] ${npcId} 상태에서 제거됨`)
+  }
+
+  // 방 정리를 지연시키는 메서드 (새로 추가)
+  private scheduleRoomCleanup() {
+    console.log('방 정리 스케줄링 시작')
+    
+    // 기존 타이머가 있다면 취소 (중복 방지)
+    if (this.cleanupTimer) {
+      clearTimeout(this.cleanupTimer)
+      this.cleanupTimer = undefined
+    }
+    
+    // 5초 후에 방이 여전히 비어있으면 삭제
+    this.cleanupTimer = setTimeout(() => {
+      if (this.state.players.size === 0 && !this.isDisposing) {
+        console.log('5초 후에도 방이 비어있어 정리를 시작합니다.')
+        this.cleanupRoom()
+      } else {
+        console.log('새 플레이어가 들어와서 방 정리를 취소합니다.')
+      }
+    }, 5000) // 5초 지연
+  }
+
+  // 방 리소스 정리 메서드 (수정됨)
+  private cleanupRoom() {
+    if (this.isDisposing) {
+      console.log('이미 방 정리가 진행 중입니다.')
+      return
+    }
+    
+    this.isDisposing = true // 정리 시작 플래그 설정
+    console.log('방 리소스 정리를 시작합니다.')
+    
+    try {
+      // 타이머 정리
+      if (this.cleanupTimer) {
+        clearTimeout(this.cleanupTimer)
+        this.cleanupTimer = undefined
+      }
+      
+      // NPC 매니저 정리
+      if (this.npcWanderManager) {
+        this.npcWanderManager.followerManagers.forEach(manager => {
+          // 각 팔로워 매니저의 리소스 정리가 필요하다면 여기서 처리
+        })
+        this.npcWanderManager = null
+      }
+      
+      // 모든 총알 제거
+      const allBullets = Array.from(this.state.bullets.keys())
+      for (const bulletId of allBullets) {
+        this.removeBullet(bulletId)
+      }
+      
+      // 모든 NPC 제거
+      const allNpcs = Array.from(this.state.npcs.keys())
+      for (const npcId of allNpcs) {
+        this.removeNpc(npcId)
+      }
+      
+      console.log('방 리소스 정리 완료, 방을 삭제합니다.')
+      
+      // 약간의 지연 후 방 삭제
+      setTimeout(() => {
+        this.disconnect()
+      }, 100)
+      
+    } catch (error) {
+      console.error('방 정리 중 오류 발생:', error)
+      this.disconnect() // 오류가 발생해도 방은 삭제
+    }
+  }
+
+  // 방이 완전히 종료될 때 타이머 정리 (새로 추가)
+  onDispose() {
+    console.log('방이 완전히 종료됩니다.')
+    if (this.cleanupTimer) {
+      clearTimeout(this.cleanupTimer)
+      this.cleanupTimer = undefined
+    }
   }
 }

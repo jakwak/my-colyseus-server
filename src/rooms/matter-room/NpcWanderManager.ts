@@ -55,7 +55,7 @@ export class NpcWanderManager extends NpcBaseController {
       if (followerCount && followerSize) {
         const formationTypes: NpcFormationType[] = ["v", "line", "escort", "scatter", "hline"];
         const randomFormation = formationTypes[i % formationTypes.length];
-        const followerManager = new NpcFollowerManager(this.world, this.npcs, leader_id, "v", this.statePlayers, this.bullets);
+        const followerManager = new NpcFollowerManager(this.world, this.npcs, leader_id, randomFormation, this.statePlayers, this.bullets);
         followerManager.statePlayers = this.statePlayers;
         followerManager.spawnFollowers(followerCount, followerSize);
         this.followerManagers.push(followerManager);
