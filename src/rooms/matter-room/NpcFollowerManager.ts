@@ -6,10 +6,9 @@ import {
   SCREEN_HEIGHT,
 } from './physics'
 import { MapSchema } from '@colyseus/schema'
-import { clamp, defoldToMatter, matterToDefold } from './NpcPhysicsUtils'
+import { clamp, matterToDefold } from './NpcPhysicsUtils'
 import {
   getFormationTargetForFollower,
-  getBoxEscortOffsets,
 } from './NpcFormationUtils'
 import { NpcBaseController } from './NpcBaseController'
 import { NpcCombatManager } from './NpcCombatManager'
@@ -29,7 +28,6 @@ export class NpcFollowerManager extends NpcBaseController {
     'left' | 'right' | 'center' | 'front' | 'back' | 'box' | 'scatter' | 'hline'
   > = new Map()
   public scatterTargets: Map<string, { x: number; y: number }> = new Map()
-  public temporaryTarget: { x: number; y: number } | null = null // (이전 호환)
   public temporaryTargetActive: boolean = false
   public returningToFormation: boolean = false
   public tempTargetOffsets: Map<string, { x: number; y: number }> = new Map()
@@ -62,10 +60,6 @@ export class NpcFollowerManager extends NpcBaseController {
     // 전투 매니저 초기화
     if (bullets && statePlayers) {
       this.combatManager = new NpcCombatManager(world, npcs, statePlayers, bullets)
-      // 전투 설정 조정
-      // this.combatManager.setDetectionRange(180)
-      // this.combatManager.setShootingRange(120)
-      // this.combatManager.setShootCooldown(800) // 0.8초 쿨다운
     }
   }
 
@@ -384,20 +378,6 @@ export class NpcFollowerManager extends NpcBaseController {
     const followerIds = Array.from(this.myNpcIds);
     
 
-    // V자 대형 좌우 인덱스 계산을 위한 역할 배열 준비
-    let vRoles: ('left' | 'right' | 'center')[] = [];
-    if (this.formationType === 'v') {
-      const count = followerIds.length;
-      const isOdd = count % 2 === 1;
-      const mid = Math.floor(count / 2);
-      for (let i = 0; i < count; i++) {
-        if (isOdd && i === mid) vRoles.push('center');
-        else if (i < mid) vRoles.push('left');
-        else vRoles.push('right');
-      }
-    }
-    let leftIdx = 0, rightIdx = 0;
-
     for (let i = 0; i < followerIds.length; i++) {
       const id = followerIds[i];
       const role = this.followerRoles.get(id);
@@ -406,26 +386,15 @@ export class NpcFollowerManager extends NpcBaseController {
       const followerBody = this.world.bodies.find((b) => b.label === id);
       if (!followerBody) continue;
 
-      // V자 대형이면 left/right 인덱스를 별도로 계산해서 넘긴다
-      let vIndex = i;
-      if (this.formationType === 'v') {
-        if (role === 'left') {
-          vIndex = leftIdx++;
-        } else if (role === 'right') {
-          vIndex = rightIdx++;
-        } else {
-          vIndex = 0; // center
-        }
-      }
       if (this.temporaryTargetActive && this.temporaryTargetPlayerId) {
         this.moveToTemporaryTarget(id, followerBody, npc, leaderAngle, leaderSpeed);
         continue;
       }
       if (this.returningToFormation) {
-        this.moveToFormation(id, vIndex, role, followerBody, npc, followerIds, leaderPos, leaderAngle, leaderSpeed);
+        this.moveToFormation(id, i, role, followerBody, npc, followerIds, leaderPos, leaderAngle, leaderSpeed);
         continue;
       }
-      this.moveToRoleTarget(id, vIndex, role, followerBody, npc, followerIds, leaderPos, leaderAngle, leaderSpeed);
+      this.moveToRoleTarget(id, i, role, followerBody, npc, followerIds, leaderPos, leaderAngle, leaderSpeed);
     }
 
     // 전투 AI 업데이트 (이동 후에 수행)

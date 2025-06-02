@@ -1,5 +1,5 @@
 import Matter from 'matter-js'
-import { matterToDefold, createNpcBody, CATEGORY_NPC, SCREEN_WIDTH, SCREEN_HEIGHT } from './physics'
+import { createNpcBody, SCREEN_WIDTH, SCREEN_HEIGHT } from './physics'
 import { Bullet, Npc, Player } from '../schema/MatterRoomState'
 import { MapSchema } from '@colyseus/schema'
 import { NpcFollowerManager, NpcFormationType } from './NpcFollowerManager'
@@ -7,8 +7,10 @@ import { detectObstacles, calculateAvoidanceDirection } from './NpcObstacleUtils
 import { getRandomTargetNear } from './NpcTargetUtils'
 import { NpcBaseController } from './NpcBaseController'
 
-const NPC_MOVE_RADIUS = 1500;
-const NPC_SPEED = 50;
+const NPC_MOVE_RADIUS = 1500; // 모든 NPC의 이동 반경(1500)
+const NPC_SPEED = 50; // 모든 NPC의 이동 속도(50)
+const NPC_RETURN_TO_FORMATION_TIME = 10000; // 팔로워가 리더에게 돌아가는 시간(10초)
+const NPC_RETURN_TO_FORMATION_DISTANCE = 800; // 팔로워가 리더에게 돌아가는 거리(800)
 
 export class NpcWanderManager extends NpcBaseController {
   private npcTargets: Map<string, { x: number; y: number }> = new Map(); // 각 NPC별 목표 지점
@@ -60,12 +62,9 @@ export class NpcWanderManager extends NpcBaseController {
       }
     }
   }
-
   // 모든 NPC 이동
   public moveAllNpcs(deltaTime: number) {
-    let loopCount = 0;
     for (const id of this.myNpcIds) {
-      loopCount++;
       const npc = this.npcs.get(id);
       if (!npc) continue;
       const npcBody = this.world.bodies.find((b) => b.label === id);
@@ -142,14 +141,11 @@ export class NpcWanderManager extends NpcBaseController {
       const dy2 = target.y - npcBody.position.y;
       const dist2 = Math.sqrt(dx2 * dx2 + dy2 * dy2);
       this.npcDirs.set(id, { x: dx2 / (dist2 || 1), y: dy2 / (dist2 || 1) });
-      if (loopCount > 1000) {
-        break;
-      }
     }
     for (const fm of this.followerManagers) {
       let shouldReturn = false;
       if (fm.temporaryTargetActive && fm.temporaryTargetActivatedAt) {
-        if (Date.now() - fm.temporaryTargetActivatedAt > 10000) {
+        if (Date.now() - fm.temporaryTargetActivatedAt > NPC_RETURN_TO_FORMATION_TIME) {
           shouldReturn = true;
         }
         if (fm.temporaryTargetPlayerId && this.statePlayers) {
@@ -158,7 +154,7 @@ export class NpcWanderManager extends NpcBaseController {
           if (player && leaderBody) {
             const dx = player.x - leaderBody.position.x;
             const dy = (SCREEN_HEIGHT - player.y) - leaderBody.position.y;
-            if (Math.sqrt(dx * dx + dy * dy) > 500) {
+            if (Math.sqrt(dx * dx + dy * dy) > NPC_RETURN_TO_FORMATION_DISTANCE) {
               shouldReturn = true;
             }
           }

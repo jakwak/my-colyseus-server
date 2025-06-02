@@ -17,10 +17,10 @@ export class NpcCombatManager {
   private bullets: MapSchema<Bullet>
   
   // 전투 설정
-  private detectionRange: number = 1000 // 감지 범위
-  private shootingRange: number = 800 // 사격 범위
-  private shootCooldown: number = 500 // 1초 쿨다운
-  private bulletSpeed: number = 5
+  private detectionRange: number = 500 // 감지 범위
+  private shootingRange: number = 500 // 사격 범위
+  private shootCooldown: number = 400 // 총알 쿨다운
+  private bulletSpeed: number = 5 // 총알 속도
   
   // NPC별 마지막 사격 시간 추적
   private lastShootTime: Map<string, number> = new Map()
@@ -142,13 +142,115 @@ export class NpcCombatManager {
     return closestPlayerHit
   }
 
-  // 기존 방향 기반 감지 (호환성 유지)
-  public detectPlayerInDirection(npcId: string): RaycastHit | null {
-    return this.detectPlayerInMovementDirection(npcId)
+  // NPC가 플레이어를 향해 총알 발사
+  public shootAtPlayer(npcId: string, targetPlayerId?: string): string | null {
+    const currentTime = Date.now()
+    const lastShoot = this.lastShootTime.get(npcId) || 0
+    
+    // 쿨다운 체크
+    if (currentTime - lastShoot < this.shootCooldown) return null
+
+    const npc = this.npcs.get(npcId)
+    if (!npc) return null
+
+    // 타겟 플레이어 찾기 (지정되지 않으면 가장 가까운 플레이어)
+    let targetPlayer: Player | null = null
+    let targetPlayerId_actual = targetPlayerId
+
+    if (targetPlayerId_actual) {
+      targetPlayer = this.players.get(targetPlayerId_actual) || null
+    } else {
+      // 가장 가까운 플레이어 찾기
+      let closestDistance = Infinity
+      for (const [playerId, player] of this.players.entries()) {
+        const distance = Math.sqrt(
+          Math.pow(player.x - npc.x, 2) + 
+          Math.pow(player.y - npc.y, 2)
+        )
+        if (distance < closestDistance && distance <= this.shootingRange) {
+          closestDistance = distance
+          targetPlayer = player
+          targetPlayerId_actual = playerId
+        }
+      }
+    }
+
+    if (!targetPlayer) return null
+
+    // 플레이어 방향 계산
+    const deltaX = targetPlayer.x - npc.x
+    const deltaY = targetPlayer.y - npc.y
+    const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY)
+    
+    if (distance === 0) return null
+
+    // 정규화된 방향 벡터
+    const dirX = deltaX / distance
+    const dirY = deltaY / distance
+
+    // 총알 생성
+    const bulletId = `npc_bullet_${npcId}_${currentTime}_${Math.floor(Math.random() * 1000)}`
+    
+    // 총알 시작 위치
+    const startX = npc.x
+    const startY = npc.y
+    
+    // Matter.js 바디 생성 (Matter 좌표계)
+    const bulletBody = Matter.Bodies.circle(startX, SCREEN_HEIGHT - startY, 3, {
+      label: bulletId,
+      isSensor: true,
+      frictionAir: 0,
+      collisionFilter: {
+        category: CATEGORY_BULLET,
+        mask: CATEGORY_PLAYER | CATEGORY_WALL
+      }
+    })
+    
+    // 속도 적용 (플레이어 방향으로)
+    Matter.Body.setVelocity(bulletBody, {
+      x: dirX * this.bulletSpeed,
+      y: -dirY * this.bulletSpeed // Y축 반전 (Matter 좌표계)
+    })
+    
+    Matter.World.add(this.world, bulletBody)
+    
+    // State에 총알 추가
+    const bullet = new Bullet()
+    bullet.id = bulletId
+    bullet.type = 'npc_bullet'
+    bullet.x = startX
+    bullet.y = startY
+    bullet.dirx = dirX
+    bullet.diry = dirY * -1
+    bullet.power = 10
+    bullet.velocity = this.bulletSpeed
+    bullet.owner_id = npcId
+    
+    this.bullets.set(bulletId, bullet)
+    
+    // 쿨다운 업데이트
+    this.lastShootTime.set(npcId, currentTime)
+    
+    console.log(`[NPC COMBAT] ${npcId}가 플레이어 ${targetPlayerId_actual} 방향으로 총알 발사`)
+    
+    return bulletId
   }
 
-  // NPC가 이동 방향으로 총알 발사
   public shootInMovementDirection(npcId: string): string | null {
+    // NPC 타입 확인 (leader인지 follower인지)
+    const isLeader = npcId.includes('leader')
+    
+    if (isLeader) {
+      // Leader는 플레이어를 향해 사격
+      return this.shootAtPlayer(npcId)
+    } else {
+      // Follower는 기존 방식대로 이동 방향으로 사격
+      return this.shootInMovementDirectionOriginal(npcId)
+    }
+  }
+
+  // 기존 이동 방향 사격 로직을 별도 메서드로 분리
+  private shootInMovementDirectionOriginal(npcId: string): string | null {
     const currentTime = Date.now()
     const lastShoot = this.lastShootTime.get(npcId) || 0
     
@@ -170,8 +272,8 @@ export class NpcCombatManager {
     const dirY = movementDirection.y 
     
     // 총알 시작 위치 (NPC 앞쪽)
-    const startX = npc.x + dirX * 20
-    const startY = npc.y + dirY * 20
+    const startX = npc.x
+    const startY = npc.y
     
     // Matter.js 바디 생성 (Matter 좌표계)
     const bulletBody = Matter.Bodies.circle(startX, SCREEN_HEIGHT - startY, 3, {
@@ -187,7 +289,7 @@ export class NpcCombatManager {
     // 속도 적용 (NPC 이동 방향으로)
     Matter.Body.setVelocity(bulletBody, {
       x: dirX * this.bulletSpeed,
-      y: dirY * this.bulletSpeed // Y축 반전
+      y: dirY * this.bulletSpeed
     })
     
     Matter.World.add(this.world, bulletBody)
@@ -214,22 +316,21 @@ export class NpcCombatManager {
     return bulletId
   }
 
-  // 기존 메서드 (호환성 유지)
-  public shootInDirection(npcId: string): string | null {
-    return this.shootInMovementDirection(npcId)
-  }
-
   // 모든 NPC의 전투 AI 업데이트
   public updateCombatAI(deltaTime: number, npcIds: string[]) {
     npcIds.forEach(npcId => {
-      // NPC 이동 방향으로 플레이어 감지
-      const detectedPlayer = this.detectPlayerInMovementDirection(npcId)
+      const isFollower = npcId.includes('follower')
       
-      if (detectedPlayer && detectedPlayer.distance <= this.shootingRange) {
-        // 이동 방향으로 사격 시도
-        this.shootInMovementDirection(npcId)
+      if (isFollower) {
+        // Follower는 기존 방식 (이동 방향으로 플레이어 감지 후 사격)
+        const detectedPlayer = this.detectPlayerInMovementDirection(npcId)
         
-        console.log(`[NPC COMBAT] ${npcId}가 ${detectedPlayer.playerId}를 감지하여 이동 방향으로 사격 (거리: ${detectedPlayer.distance.toFixed(1)})`)
+        if (detectedPlayer && detectedPlayer.distance <= this.shootingRange) {
+          this.shootInMovementDirectionOriginal(npcId)
+        }
+      } else {
+        // Leader는 사격 범위 내 플레이어를 직접 타겟팅
+        this.shootAtPlayer(npcId)
       }
     })
   }
@@ -270,35 +371,6 @@ export class NpcCombatManager {
     const npc = this.npcs.get(npcId)
     if (npc) {
       this.npcPreviousPositions.set(npcId, { x: npc.x, y: npc.y })
-    }
-  }
-
-  // 디버그용: 레이캐스트 시각화 데이터 반환
-  public getDebugRaycastData(npcId: string): any {
-    const npc = this.npcs.get(npcId)
-    if (!npc) return null
-
-    const npcPos = { x: npc.x, y: SCREEN_HEIGHT - npc.y }
-    const movementDirection = this.getNpcMovementDirection(npcId)
-    const direction = movementDirection ? 
-      { x: movementDirection.x, y: -movementDirection.y } : 
-      { x: npc.dirx || 1, y: -(npc.diry || 0) }
-    
-    const raycastResults = this.raycastInDirection(npcPos, direction)
-    const detectedPlayer = this.detectPlayerInMovementDirection(npcId)
-    
-    return {
-      npcId,
-      position: { x: npc.x, y: npc.y },
-      movementDirection: movementDirection,
-      staticDirection: { x: npc.dirx, y: npc.diry },
-      detectionRange: this.detectionRange,
-      raycastHits: raycastResults.length,
-      detectedPlayer: detectedPlayer ? {
-        playerId: detectedPlayer.playerId,
-        distance: detectedPlayer.distance,
-        hitPoint: detectedPlayer.hitPoint
-      } : null
     }
   }
 }
