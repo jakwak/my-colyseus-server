@@ -33,6 +33,11 @@ export class NpcFollowerManager extends NpcBaseController {
   public tempTargetOffsets: Map<string, { x: number; y: number }> = new Map()
   public temporaryTargetActivatedAt: number | null = null
   public temporaryTargetPlayerId: string | null = null;
+  private followerTurnStates: Map<string, {
+    isTurning: boolean;
+    turnDirection: number; // 1: 90도, -1: -90도
+    originalTargetAngle: number;
+  }> = new Map();
 
   // 전투 시스템 추가
   private combatManager: NpcCombatManager | null = null
@@ -43,6 +48,9 @@ export class NpcFollowerManager extends NpcBaseController {
   baseDistance: number = 50 // 기본 간격 (50 ~ 300)
   speedMultiplier: number = 1 // 리더 대비 속도 비율 (0.1 ~ 2.0)
   formationSpacing: number = 50 // V자형 내 NPC 간 간격 (20 ~ 200)
+
+  // 팔로워별 회피 상태 저장
+  private evadeStates: Map<string, { evading: boolean, angle: number, startTime: number }> = new Map();
 
   constructor(
     world: Matter.World,
@@ -232,7 +240,7 @@ export class NpcFollowerManager extends NpcBaseController {
 
   // 임시 타겟 이동 처리
   private moveToTemporaryTarget(id: string, followerBody: Matter.Body, npc: Npc, leaderAngle: number, leaderSpeed: number) {
-    // 플레이어 추적: 플레이어의 현재 위치를 계속 참조
+    // 플레이어 추적: 플레이어의 현재 위치를 직접 타겟으로 설정
     let targetX = 0, targetY = 0;
     if (this.temporaryTargetPlayerId && this.statePlayers) {
       const player = this.statePlayers.get(this.temporaryTargetPlayerId);
@@ -241,26 +249,52 @@ export class NpcFollowerManager extends NpcBaseController {
         targetY = SCREEN_HEIGHT - player.y;
       }
     }
-    // 팔로워별 임시 목표 오프셋이 없으면 생성
-    let offset = this.tempTargetOffsets.get(id);
-    if (!offset) {
-      const angle = Math.random() * 2 * Math.PI;
-      const r = 100 + Math.random() * 100;
-      offset = { x: Math.cos(angle) * r, y: Math.sin(angle) * r };
-      this.tempTargetOffsets.set(id, offset);
-    }
+
+    // 플레이어 위치를 직접 타겟으로 설정 (오프셋 제거)
     const target = {
-      x: targetX + offset.x,
-      y: targetY + offset.y,
+      x: targetX,
+      y: targetY,
     };
-    // 임시 타겟일 때는 고정 속도 80 사용
-    const distanceToTarget = this.moveFollowerToTarget(followerBody, npc, target, leaderAngle, leaderSpeed, false);
-    // 목표점에 도달하면 새로운 오프셋으로 갱신
-    if (distanceToTarget < 10) {
-      const angle = Math.random() * 2 * Math.PI;
-      const r = 100 + Math.random() * 100;
-      this.tempTargetOffsets.set(id, { x: Math.cos(angle) * r, y: Math.sin(angle) * r });
+
+    const dx = target.x - followerBody.position.x;
+    const dy = target.y - followerBody.position.y;
+    const distanceToTarget = Math.sqrt(dx * dx + dy * dy);
+
+    let evadeState = this.evadeStates.get(id);
+
+    if (evadeState && evadeState.evading) {
+      // 회피 중: 1.5초(1500ms) 동안은 무조건 직진
+      if (Date.now() - evadeState.startTime >= 3000) {
+        // 회피 종료, 다음 프레임부터는 타겟 추적 및 재회피 가능
+        this.evadeStates.set(id, { evading: false, angle: 0, startTime: 0 });
+      } else {
+        const moveAngle = evadeState.angle;
+        const speed = 2;
+        Matter.Body.setVelocity(followerBody, {
+          x: Math.cos(moveAngle) * speed,
+          y: Math.sin(moveAngle) * speed,
+        });
+        npc.x = followerBody.position.x;
+        npc.y = SCREEN_HEIGHT - followerBody.position.y;
+        npc.dirx = Math.cos(moveAngle);
+        npc.diry = Math.sin(moveAngle) * 0.5;
+        return;
+      }
     }
+
+    // 회피 중이 아니면, 플레이어에게 가까워질 때 회피 진입
+    if (!evadeState || !evadeState.evading) {
+      if (distanceToTarget <= 50) { // 회피 거리를 50으로 증가 (더 일찍 회피)
+        // 현재 이동 방향 기준으로 30도(또는 -30도) 회전하여 회피
+        const currentMoveAngle = Math.atan2(dy, dx);
+        const evadeAngle = currentMoveAngle + (Math.random() < 0.5 ? 1 : -1) * (Math.PI / 6); // 30도
+        this.evadeStates.set(id, { evading: true, angle: evadeAngle, startTime: Date.now() });
+        return;
+      }
+    }
+
+    // 플레이어를 향해 직진
+    this.moveFollowerToTarget(followerBody, npc, target, leaderAngle, leaderSpeed, true, 3); // 고정 속도로 직진
   }
 
   // formation 복귀 이동 처리
