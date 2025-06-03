@@ -231,8 +231,6 @@ export class NpcCombatManager {
     // 쿨다운 업데이트
     this.lastShootTime.set(npcId, currentTime)
     
-    console.log(`[NPC COMBAT] ${npcId}가 플레이어 ${targetPlayerId_actual} 방향으로 총알 발사`)
-    
     return bulletId
   }
 
@@ -311,8 +309,6 @@ export class NpcCombatManager {
     // 쿨다운 업데이트
     this.lastShootTime.set(npcId, currentTime)
     
-    console.log(`[NPC COMBAT] ${npcId}가 이동 방향 (${dirX.toFixed(2)}, ${dirY.toFixed(2)})으로 총알 발사`)
-    
     return bulletId
   }
 
@@ -371,6 +367,25 @@ export class NpcCombatManager {
     const npc = this.npcs.get(npcId)
     if (npc) {
       this.npcPreviousPositions.set(npcId, { x: npc.x, y: npc.y })
+    }
+  }
+
+  // NPC가 쏜 총알만 동기화 및 화면 밖 삭제
+  public syncAndCleanupNpcBullets(npcBullets: MapSchema<Bullet>) {
+    for (const [id, bullet] of npcBullets.entries()) {
+      const body = this.world.bodies.find((b) => b.label === id)
+      if (body) {
+        const defoldPos = matterToDefold(body.position)
+        bullet.x = defoldPos.x
+        bullet.y = defoldPos.y
+        if (
+          bullet.x < -100 || bullet.x > SCREEN_WIDTH + 100 ||
+          bullet.y < -100 || bullet.y > SCREEN_HEIGHT + 100
+        ) {
+          try { Matter.World.remove(this.world, body) } catch {}
+          npcBullets.delete(id)
+        }
+      }
     }
   }
 }

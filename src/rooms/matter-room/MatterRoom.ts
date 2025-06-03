@@ -12,6 +12,7 @@ import {
 } from './physics'
 import Matter from 'matter-js'
 import { NpcWanderManager } from './NpcWanderManager'
+import { PlayerController } from './PlayerController'
 
 export class MatterRoom extends Room<State> {
   // 디버그 모드 (true면 물리 바디 정보 전송)
@@ -21,6 +22,7 @@ export class MatterRoom extends Room<State> {
   private npcWanderManager: NpcWanderManager | null = null
   private cleanupTimer?: NodeJS.Timeout  // 방 정리 지연 타이머
   private isDisposing: boolean = false   // 방 정리 중인지 체크
+  private playerController: PlayerController | null = null
 
   onCreate() {
     this.state = new State()
@@ -29,116 +31,77 @@ export class MatterRoom extends Room<State> {
     this.world = world
     addWalls(this.world)
 
-    // 예시: wander NPC 3개, 각 NPC마다 팔로워 6개(size 10)씩 생성
-    this.npcWanderManager = new NpcWanderManager(this.world, this.state.npcs, this.state.players, this.state.bullets)
+    // NPC 매니저 초기화
+    this.npcWanderManager = new NpcWanderManager(this.world, this.state.npcs, this.state.players, this.state.npcBullets)
 
-    // 팔로워 매니저는 내부적으로 자동 생성/관리됨
-    this.npcWanderManager.spawnNpcs(
-      10, // wander NPC 개수
-      25, // wander NPC 크기
-      5, // 각 wander NPC마다 팔로워 개수
-      10 // 팔로워 크기
-    )
+    // NPC 및 팔로워 생성 (1초 간격 5회)
+    let spawnCount = 0
+    const spawnInterval = setInterval(() => {
+      this.npcWanderManager.spawnNpcs(
+        1,
+        25,
+        Math.floor(Math.random() * 7) + 3,
+        10
+      )
+      spawnCount++
+      if (spawnCount >= 5) {
+        clearInterval(spawnInterval)
+      }
+    }, 1000)
 
-    // // 팔로워 매니저는 내부적으로 자동 생성/관리됨
-    // this.npcWanderManager.spawnNpcs(
-    //   5, // wander NPC 개수
-    //   25, // wander NPC 크기
-    //   3, // 각 wander NPC마다 팔로워 개수
-    //   10 // 팔로워 크기
-    // )
+    this.playerController = new PlayerController(this.world, this.state.players)
 
-    // this.npcWanderManager.spawnNpcs(
-    //   5, // wander NPC 개수
-    //   25, // wander NPC 크기
-    //   8, // 각 wander NPC마다 팔로워 개수
-    //   10 // 팔로워 크기
-    // )
-
-    this.onMessage('move', this.handleMove.bind(this))
+    this.onMessage('move', (client, data) => {
+      if (this.playerController) {
+        this.playerController.handleMove(client, data)
+      }
+    })
     this.onMessage('position_sync', this.handlePositionSync.bind(this))
     this.onMessage('toggle_debug', this.handleToggleDebug.bind(this))
     this.onMessage('get_debug_bodies', this.handleGetDebugBodies.bind(this))
-    this.onMessage('shoot_bullet', this.handleShootBullet.bind(this))
+    this.onMessage('shoot_bullet', (client, data) => {
+      if (this.playerController) {
+        this.playerController.shootBullet(client, data, this.state.playerBullets)
+      }
+    })
 
-    //====================================
-    // 물리 업데이트 주기 설정
+    // 물리 업데이트 루프
     this.engine.timing.timeScale = 1.0
-
     this.setSimulationInterval((deltaTime) => {
       Matter.Engine.update(this.engine, deltaTime)
-
-      // const stateSize = JSON.stringify(this.state.toJSON()).length
-      // console.log(`Current state size: ${stateSize} bytes`)
-
-      // === NPC 랜덤 이동 ===
+      if (this.playerController) {
+        this.playerController.updateAndCleanupBullets(this.state.playerBullets)
+      }
       if (this.npcWanderManager) {
         this.npcWanderManager.moveAllNpcs(deltaTime)
-      }
-
-      // 플레이어 상태 업데이트
-      this.world.bodies.forEach((body) => {
-        const player = this.state.players.get(body.label.replace('player_', ''))
-        if (player) {
-          const defoldPos = matterToDefold(body.position)
-          player.x = defoldPos.x
-          player.y = defoldPos.y
-        }
-        const bullet = this.state.bullets.get(body.label)
-        if (bullet) {
-          const defoldPos = matterToDefold(body.position)
-          bullet.x = defoldPos.x
-          bullet.y = defoldPos.y
-
-          // 예시: 화면 밖이면 삭제
-          if (
-            bullet.x < -100 ||
-            bullet.x > 2100 ||
-            bullet.y < -100 ||
-            bullet.y > 2100
-          ) {
-            this.removeBullet(body.label)
+        for (const fm of this.npcWanderManager.followerManagers) {
+          const combatManager = fm.getCombatManager && fm.getCombatManager()
+          if (combatManager) {
+            combatManager.syncAndCleanupNpcBullets(this.state.npcBullets)
           }
         }
-      })
+      }
     }, 1000 / 60)
 
-    // 충돌 이벤트 리스너 수정
+    // 충돌 이벤트 리스너
     Matter.Events.on(this.engine, 'collisionStart', (event) => {
       for (const pair of event.pairs) {
         const labelA = pair.bodyA.label
         const labelB = pair.bodyB.label
-
-        if (this.state.bullets.has(labelA)) {
+        if (this.state.playerBullets.has(labelA) || this.state.npcBullets.has(labelA)) {
           this.handleBulletCollision(labelA, labelB)
-        } else if (this.state.bullets.has(labelB)) {
+        } else if (this.state.playerBullets.has(labelB) || this.state.npcBullets.has(labelB)) {
           this.handleBulletCollision(labelB, labelA)
         }
       }
     })
   }
-  // MatterRoom.ts에 추가할 함수
+
   private handleBulletCollision(bulletId: string, npcId: string) {
-    const bullet = this.state.bullets.get(bulletId)
+    let bullet = this.state.playerBullets.get(bulletId)
+    if (!bullet) bullet = this.state.npcBullets.get(bulletId)
     if (!bullet || bullet.owner_id === npcId) return
-
     this.removeBullet(bulletId)
-    
-  }
-
-  private handleMove(client: Client, data: any) {
-    const player = this.state.players.get(client.sessionId)
-    if (player) {
-      const body = this.world.bodies.find((b) => b.label === "player_" + client.sessionId)
-      if (body) {
-        moveBody(body, data)
-        const defoldPos = matterToDefold(body.position)
-        player.x = defoldPos.x
-        player.y = defoldPos.y
-        player.dirx = data.x
-        player.diry = data.y
-      }
-    }
   }
 
   private handlePositionSync(client: Client, data: any) {
@@ -188,40 +151,6 @@ export class MatterRoom extends Room<State> {
       bodyDataList.push(bodyData)
     })
     client.send('debug_bodies', { bodies: bodyDataList })
-  }
-
-  private handleShootBullet(client: Client, data: any) {
-    // data: { type, x, y, dirx, diry, power, velocity }
-    const bulletId = `bullet_${Date.now()}_${Math.floor(Math.random() * 10000)}`
-    const { type, x, y, dirx, diry, power, velocity } = data
-
-    // Matter.js 바디 생성
-    const radius = 5 // 예시: 총알 반지름
-    const bulletBody = Matter.Bodies.circle(x, SCREEN_HEIGHT - y, radius, {
-      label: bulletId,
-      isSensor: true, // 충돌만 감지, 물리 반응 없음
-      frictionAir: 0,
-    })
-    // 방향 단위 벡터로 속도 적용
-    Matter.Body.setVelocity(bulletBody, {
-      x: dirx * velocity,
-      y: diry * velocity * -1,
-    })
-    Matter.World.add(this.world, bulletBody)
-
-    // State에 등록
-    const bullet = new Bullet()
-    bullet.id = bulletId
-    bullet.type = type
-    bullet.x = x
-    bullet.y = SCREEN_HEIGHT - y
-    bullet.dirx = dirx
-    bullet.diry = diry * -1
-    bullet.power = power
-    bullet.velocity = velocity
-    bullet.owner_id = client.sessionId
-
-    this.state.bullets.set(bulletId, bullet)
   }
 
   onJoin(
@@ -288,7 +217,7 @@ export class MatterRoom extends Room<State> {
     }
     
     // 플레이어가 소유한 총알들 제거
-    const playerBullets = Array.from(this.state.bullets.entries())
+    const playerBullets = Array.from(this.state.playerBullets.entries())
       .filter(([_, bullet]) => bullet.owner_id === client.sessionId)
     
     for (const [bulletId, _] of playerBullets) {
@@ -306,7 +235,8 @@ export class MatterRoom extends Room<State> {
   }
 
   private removeBullet(bulletId: string) {
-    const bullet = this.state.bullets.get(bulletId)
+    let bullet = this.state.playerBullets.get(bulletId)
+    if (!bullet) bullet = this.state.npcBullets.get(bulletId)
     if (bullet) {
       const body = this.world.bodies.find((b) => b.label === bulletId)
       if (body) {
@@ -316,7 +246,8 @@ export class MatterRoom extends Room<State> {
           // 이미 삭제된 경우 무시
         }
       }
-      this.state.bullets.delete(bulletId)
+      this.state.playerBullets.delete(bulletId)
+      this.state.npcBullets.delete(bulletId)
     }
   }
 
@@ -379,8 +310,12 @@ export class MatterRoom extends Room<State> {
       }
       
       // 모든 총알 제거
-      const allBullets = Array.from(this.state.bullets.keys())
-      for (const bulletId of allBullets) {
+      const allPlayerBullets = Array.from(this.state.playerBullets.keys())
+      for (const bulletId of allPlayerBullets) {
+        this.removeBullet(bulletId)
+      }
+      const allNpcBullets = Array.from(this.state.npcBullets.keys())
+      for (const bulletId of allNpcBullets) {
         this.removeBullet(bulletId)
       }
       

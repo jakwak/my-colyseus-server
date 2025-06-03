@@ -284,7 +284,7 @@ export class NpcFollowerManager extends NpcBaseController {
 
     // 회피 중이 아니면, 플레이어에게 가까워질 때 회피 진입
     if (!evadeState || !evadeState.evading) {
-      if (distanceToTarget <= 50) { // 회피 거리를 50으로 증가 (더 일찍 회피)
+      if (distanceToTarget <= 100) { // 회피 거리를 100으로 증가 (더 일찍 회피)
         // 현재 이동 방향 기준으로 30도(또는 -30도) 회전하여 회피
         const currentMoveAngle = Math.atan2(dy, dx);
         const evadeAngle = currentMoveAngle + (Math.random() < 0.5 ? 1 : -1) * (Math.PI / 6); // 30도

@@ -37,7 +37,9 @@ export class Bullet extends Schema {
 export class State extends Schema {
   @type({ map: Player }) players = new MapSchema<Player>();
   @type({ map: Npc }) npcs = new MapSchema<Npc>();
-  @type({ map: Bullet }) bullets = new MapSchema<Bullet>();
+  // @type({ map: Bullet }) bullets = new MapSchema<Bullet>(); // 기존 bullets는 주석처리
+  @type({ map: Bullet }) playerBullets = new MapSchema<Bullet>();
+  @type({ map: Bullet }) npcBullets = new MapSchema<Bullet>();
 
   // 밝은 톤의 색상 목록 (중복 방지)
   availableColors: string[] = [

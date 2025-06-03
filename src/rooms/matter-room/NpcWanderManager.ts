@@ -52,11 +52,11 @@ export class NpcWanderManager extends NpcBaseController {
       this.myNpcIds.add(leader_id); // 생성한 NPC ID 추가
       this.npcDirs.set(leader_id, { x: 1, y: 0 });
       this.npcTargets.set(leader_id, getRandomTargetNear(x, y, NPC_MOVE_RADIUS, { x: 1, y: 0 }));
+      
       if (followerCount && followerSize) {
         const formationTypes: NpcFormationType[] = ["v", "line", "escort", "scatter", "hline"];
-        const randomFormation = formationTypes[i % formationTypes.length];
-        const followerManager = new NpcFollowerManager(this.world, this.npcs, leader_id, randomFormation, this.statePlayers, this.bullets);
-        followerManager.statePlayers = this.statePlayers;
+        const randomFormation = formationTypes[Math.floor(Math.random() * formationTypes.length)];
+        const followerManager = new NpcFollowerManager(this.world, this.npcs, leader_id, randomFormation, this.statePlayers, this.bullets);        followerManager.statePlayers = this.statePlayers;
         followerManager.spawnFollowers(followerCount, followerSize);
         this.followerManagers.push(followerManager);
       }
