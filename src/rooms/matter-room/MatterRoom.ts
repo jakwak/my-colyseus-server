@@ -98,6 +98,7 @@ export class MatterRoom extends Room<State> {
   }
 
   private handleBulletCollision(bulletId: string, npcId: string) {
+    if (!bulletId) return;
     let bullet = this.state.playerBullets.get(bulletId)
     if (!bullet) bullet = this.state.npcBullets.get(bulletId)
     if (!bullet || bullet.owner_id === npcId) return
@@ -235,18 +236,17 @@ export class MatterRoom extends Room<State> {
   }
 
   private removeBullet(bulletId: string) {
-    let bullet = this.state.playerBullets.get(bulletId)
-    if (!bullet) bullet = this.state.npcBullets.get(bulletId)
-    if (bullet) {
-      const body = this.world.bodies.find((b) => b.label === bulletId)
-      if (body) {
-        try {
-          Matter.World.remove(this.world, body)
-        } catch (e) {
-          // 이미 삭제된 경우 무시
-        }
-      }
+    if (!bulletId) return;
+    // Matter.js 바디도 안전하게 삭제
+    const body = this.world.bodies.find((b) => b.label === bulletId)
+    if (body) {
+      try { Matter.World.remove(this.world, body) } catch {}
+    }
+    // MapSchema에서 존재할 때만 삭제
+    if (this.state.playerBullets.has(bulletId)) {
       this.state.playerBullets.delete(bulletId)
+    }
+    if (this.state.npcBullets.has(bulletId)) {
       this.state.npcBullets.delete(bulletId)
     }
   }
