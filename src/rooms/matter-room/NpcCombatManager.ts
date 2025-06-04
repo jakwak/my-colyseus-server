@@ -75,7 +75,7 @@ export class NpcCombatManager {
   }
 
   // NPC 이동 방향으로 레이캐스트하여 플레이어 감지
-  public detectPlayerInMovementDirection(npcId: string): RaycastHit | null {
+  public detectPlayerInMovementDirection(npcId: string): { playerId: string, distance: number } | null {
     const npc = this.npcs.get(npcId)
     if (!npc) return null
 
@@ -88,58 +88,69 @@ export class NpcCombatManager {
     if (!movementDirection) return null
 
     const npcDirection = { x: movementDirection.x, y: -movementDirection.y } // Y축 반전
-
-    // 레이캐스트 끝점 계산
-    const rayEnd = {
-      x: npcPos.x + npcDirection.x * this.detectionRange,
-      y: npcPos.y + npcDirection.y * this.detectionRange
-    }
-
-    // Matter.js Query.ray로 레이캐스트 수행
-    const raycastResults = Matter.Query.ray(
-      this.world.bodies,
-      npcPos,
-      rayEnd
-    )
+    const baseAngle = Math.atan2(npcDirection.y, npcDirection.x)
+    const FAN_ANGLE = Math.PI / 6 // 30도
+    const RAY_COUNT = 5 // 부채꼴을 구성할 레이 개수
 
     // 플레이어 바디만 필터링하고 가장 가까운 것 찾기
-    let closestPlayerHit: RaycastHit | null = null
+    let closestPlayerId: string | null = null
     let closestDistance = Infinity
 
-    for (const collision of raycastResults) {
-      const bodyLabel = collision.bodyA.label
+    // 부채꼴 형태로 여러 방향으로 레이캐스트
+    for (let i = 0; i < RAY_COUNT; i++) {
+      // -30도 ~ +30도 사이의 각도 계산
+      const angleOffset = (i / (RAY_COUNT - 1) - 0.5) * 2 * FAN_ANGLE
+      const rayAngle = baseAngle + angleOffset
       
-      // 플레이어 바디인지 확인 (player_ 접두사 또는 sessionId)
-      const isPlayerBody = bodyLabel.startsWith('player_') || this.players.has(bodyLabel)
-      if (!isPlayerBody) continue
+      // 레이 방향 계산
+      const rayDirection = {
+        x: Math.cos(rayAngle),
+        y: Math.sin(rayAngle)
+      }
 
-      // 플레이어 ID 추출
-      const playerId = bodyLabel.startsWith('player_') ? 
-        bodyLabel.replace('player_', '') : bodyLabel
-      
-      const player = this.players.get(playerId)
-      if (!player) continue
+      // 레이캐스트 끝점 계산
+      const rayEnd = {
+        x: npcPos.x + rayDirection.x * this.detectionRange,
+        y: npcPos.y + rayDirection.y * this.detectionRange
+      }
 
-      // 충돌점까지의 거리 계산
-      const hitPoint = collision.bodyB ? collision.bodyB.position : collision.bodyA.position
-      const distance = Math.sqrt(
-        Math.pow(hitPoint.x - npcPos.x, 2) + 
-        Math.pow(hitPoint.y - npcPos.y, 2)
+      // Matter.js Query.ray로 레이캐스트 수행
+      const raycastResults = Matter.Query.ray(
+        this.world.bodies,
+        npcPos,
+        rayEnd
       )
 
-      // 가장 가까운 플레이어 선택
-      if (distance < closestDistance) {
-        closestDistance = distance
-        closestPlayerHit = {
-          playerId,
-          player,
-          distance,
-          hitPoint: { x: hitPoint.x, y: SCREEN_HEIGHT - hitPoint.y } // Defold 좌표계로 변환
+      for (const collision of raycastResults) {
+        const bodyLabel = collision.bodyA.label
+        
+        // 플레이어 바디인지 확인 (player_ 접두사 또는 sessionId)
+        const isPlayerBody = bodyLabel.startsWith('player_') || this.players.has(bodyLabel)
+        if (!isPlayerBody) continue
+
+        // 플레이어 ID 추출
+        const playerId = bodyLabel.startsWith('player_') ? 
+          bodyLabel.replace('player_', '') : bodyLabel
+        
+        const player = this.players.get(playerId)
+        if (!player) continue
+
+        // 충돌점까지의 거리 계산
+        const hitPoint = collision.bodyB ? collision.bodyB.position : collision.bodyA.position
+        const distance = Math.sqrt(
+          Math.pow(hitPoint.x - npcPos.x, 2) + 
+          Math.pow(hitPoint.y - npcPos.y, 2)
+        )
+
+        // 가장 가까운 플레이어 선택
+        if (distance < closestDistance) {
+          closestDistance = distance
+          closestPlayerId = playerId
         }
       }
     }
 
-    return closestPlayerHit
+    return closestPlayerId ? { playerId: closestPlayerId, distance: closestDistance } : null
   }
 
   // NPC가 플레이어를 향해 총알 발사

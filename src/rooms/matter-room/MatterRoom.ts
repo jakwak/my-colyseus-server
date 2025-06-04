@@ -1,5 +1,5 @@
 import { Room, Client } from 'colyseus'
-import { Player, State, Npc, Bullet } from '../schema/MatterRoomState'
+import { Player, State } from '../schema/MatterRoomState'
 import {
   createEngineAndWorld,
   addWalls,

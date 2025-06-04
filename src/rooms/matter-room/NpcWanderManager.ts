@@ -6,6 +6,7 @@ import { NpcFollowerManager, NpcFormationType } from './NpcFollowerManager'
 import { detectObstacles, calculateAvoidanceDirection } from './NpcObstacleUtils'
 import { getRandomTargetNear } from './NpcTargetUtils'
 import { NpcBaseController } from './NpcBaseController'
+import { NpcCombatManager } from './NpcCombatManager'
 
 const NPC_MOVE_RADIUS = 1500; // 모든 NPC의 이동 반경(1500)
 const NPC_SPEED = 50; // 모든 NPC의 이동 속도(50)
@@ -19,10 +20,12 @@ export class NpcWanderManager extends NpcBaseController {
   public followerManagers: NpcFollowerManager[] = [] // 각 그룹별 팔로워 매니저
 
   private bullets: MapSchema<Bullet>;
+  private combatManager?: NpcCombatManager;
 
   constructor(world: Matter.World, npcs: MapSchema<Npc>, statePlayers: MapSchema<Player>, bullets: MapSchema<Bullet>) {
     super(world, npcs, statePlayers);
     this.bullets = bullets;
+    this.combatManager = new NpcCombatManager(world, npcs, statePlayers, bullets);
   }
   // 임의의 NPC ID 반환
   public getRandomNpcId(): string | null {
@@ -72,37 +75,20 @@ export class NpcWanderManager extends NpcBaseController {
       let target = this.npcTargets.get(id);
       let dir = this.npcDirs.get(id) || { x: 1, y: 0 };
 
-      // ===== 플레이어 감지: 전방 -45~+45도(부채꼴) 내에 플레이어가 있으면 임시 타겟 지정 =====
-      const NPC_PLAYER_DETECT_DISTANCE = 400;
-      const NPC_PLAYER_DETECT_ANGLE = Math.PI / 4; // 45도
-      let foundPlayer: string | null = null;
-      for (const [playerId, player] of this.statePlayers.entries()) {
-        if (!player) continue;
-        const playerMatterY = typeof player.y === 'number' ? SCREEN_HEIGHT - player.y : 0;
-        const dx = player.x - npcBody.position.x;
-        const dy = playerMatterY - npcBody.position.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        if (dist > NPC_PLAYER_DETECT_DISTANCE) continue;
-        const npcAngle = Math.atan2(dir.y, dir.x);
-        const toPlayerAngle = Math.atan2(dy, dx);
-        let angleDiff = toPlayerAngle - npcAngle;
-        while (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
-        while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
-        if (Math.abs(angleDiff) <= NPC_PLAYER_DETECT_ANGLE) {
-          foundPlayer = playerId;
-          break;
-        }
-      }
-      if (foundPlayer !== null) {
+      // ===== 플레이어 감지: 이동 방향으로 플레이어가 있으면 임시 타겟 지정 =====
+      const detectedPlayer = this.combatManager?.detectPlayerInMovementDirection(id);
+      if (detectedPlayer && detectedPlayer.distance <= 400) {
         for (const fm of this.followerManagers) {
           if (fm.leaderId === id && !fm.temporaryTargetActive) {
-            fm.temporaryTargetPlayerId = foundPlayer;
+            fm.temporaryTargetPlayerId = detectedPlayer.playerId;
             fm.temporaryTargetActive = true;
             fm.temporaryTargetActivatedAt = Date.now();
             fm.returningToFormation = false;
+            fm.enableCombat()
           }
         }
       }
+
       // ===== 기존 장애물 감지 및 회피 =====
       if (detectObstacles(this.world, npcBody, dir, this.statePlayers)) {
         const newDir = calculateAvoidanceDirection(dir);
@@ -166,6 +152,7 @@ export class NpcWanderManager extends NpcBaseController {
         fm.tempTargetOffsets.clear();
         fm.temporaryTargetActivatedAt = null;
         fm.temporaryTargetPlayerId = null;
+        fm.disableCombat()
       }
       fm.moveAllFollowers(deltaTime);
     }

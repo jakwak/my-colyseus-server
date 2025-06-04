@@ -41,7 +41,7 @@ export class NpcFollowerManager extends NpcBaseController {
 
   // 전투 시스템 추가
   private combatManager: NpcCombatManager | null = null
-  public combatEnabled: boolean = true // 전투 활성화 여부
+  public combatEnabled: boolean = false // 전투 활성화 여부
 
   // 직접 수정 가능한 속성들
   formationAngle: number = Math.PI / 4 // 45도 각도 (0 ~ π/2)
@@ -170,7 +170,7 @@ export class NpcFollowerManager extends NpcBaseController {
   }
 
   // 역할별 타겟 위치 계산 함수
-  private getTargetPosition(id: string, i: number, role: string | undefined, followerBody: Matter.Body, followerIds: string[], leaderPos: any, leaderAngle: number) {
+  private getTargetPosition(id: string, i: number, role: string | undefined, followerIds: string[], leaderPos: any, leaderAngle: number) {
     return getFormationTargetForFollower(
       id,
       i,
@@ -297,21 +297,13 @@ export class NpcFollowerManager extends NpcBaseController {
     this.moveFollowerToTarget(followerBody, npc, target, leaderAngle, leaderSpeed, true, 3); // 고정 속도로 직진
   }
 
-  // formation 복귀 이동 처리
-  private moveToFormation(id: string, i: number, role: string | undefined, followerBody: Matter.Body, npc: Npc, followerIds: string[], leaderPos: any, leaderAngle: number, leaderSpeed: number) {
-    const target = this.getTargetPosition(id, i, role, followerBody, followerIds, leaderPos, leaderAngle);
-    // 대형 복귀 시에는 리더 속도 기반 사용
+  private moveFollower(id: string, i: number, role: string | undefined, followerBody: Matter.Body, npc: Npc, followerIds: string[], leaderPos: any, leaderAngle: number, leaderSpeed: number, checkReturningToFormation: boolean = false) {
+    const target = this.getTargetPosition(id, i, role, followerIds, leaderPos, leaderAngle);
     const distanceToTarget = this.moveFollowerToTarget(followerBody, npc, target, leaderAngle, leaderSpeed, false);
-    if (distanceToTarget <= 5) {
+    
+    if (checkReturningToFormation && distanceToTarget <= 5) {
       this.returningToFormation = false;
     }
-  }
-
-  // 일반 역할별 이동 처리
-  private moveToRoleTarget(id: string, i: number, role: string | undefined, followerBody: Matter.Body, npc: Npc, followerIds: string[], leaderPos: any, leaderAngle: number, leaderSpeed: number) {
-    const target = this.getTargetPosition(id, i, role, followerBody, followerIds, leaderPos, leaderAngle);
-    // 일반 대형 유지 시에는 리더 속도 기반 사용
-    this.moveFollowerToTarget(followerBody, npc, target, leaderAngle, leaderSpeed, false);
   }
 
   moveAllFollowers(deltaTime: number) {
@@ -340,15 +332,15 @@ export class NpcFollowerManager extends NpcBaseController {
       const followerBody = this.world.bodies.find((b) => b.label === id);
       if (!followerBody) continue;
 
-      if (this.temporaryTargetActive && this.temporaryTargetPlayerId) {
+      if (this.combatEnabled && this.temporaryTargetActive && this.temporaryTargetPlayerId) {
         this.moveToTemporaryTarget(id, followerBody, npc, leaderAngle, leaderSpeed);
         continue;
       }
       if (this.returningToFormation) {
-        this.moveToFormation(id, i, role, followerBody, npc, followerIds, leaderPos, leaderAngle, leaderSpeed);
+        this.moveFollower(id, i, role, followerBody, npc, followerIds, leaderPos, leaderAngle, leaderSpeed, true);
         continue;
       }
-      this.moveToRoleTarget(id, i, role, followerBody, npc, followerIds, leaderPos, leaderAngle, leaderSpeed);
+      this.moveFollower(id, i, role, followerBody, npc, followerIds, leaderPos, leaderAngle, leaderSpeed, false);
     }
 
     // 전투 AI 업데이트 (이동 후에 수행)
