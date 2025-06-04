@@ -19,7 +19,7 @@ export class NpcCombatManager {
   // 전투 설정
   private detectionRange: number = 500 // 감지 범위
   private shootingRange: number = 500 // 사격 범위
-  private shootCooldown: number = 400 // 총알 쿨다운
+  private shootCooldown: number = 800 // 총알 쿨다운
   private bulletSpeed: number = 5 // 총알 속도
   
   // NPC별 마지막 사격 시간 추적

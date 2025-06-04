@@ -24,7 +24,8 @@ export class MatterRoom extends Room<State> {
   private isDisposing: boolean = false   // 방 정리 중인지 체크
   private playerController: PlayerController | null = null
 
-  onCreate() {
+  constructor() {
+    super()
     this.state = new State()
     const { engine, world } = createEngineAndWorld()
     this.engine = engine
@@ -50,20 +51,6 @@ export class MatterRoom extends Room<State> {
     }, 1000)
 
     this.playerController = new PlayerController(this.world, this.state.players)
-
-    this.onMessage('move', (client, data) => {
-      if (this.playerController) {
-        this.playerController.handleMove(client, data)
-      }
-    })
-    this.onMessage('position_sync', this.handlePositionSync.bind(this))
-    this.onMessage('toggle_debug', this.handleToggleDebug.bind(this))
-    this.onMessage('get_debug_bodies', this.handleGetDebugBodies.bind(this))
-    this.onMessage('shoot_bullet', (client, data) => {
-      if (this.playerController) {
-        this.playerController.shootBullet(client, data, this.state.playerBullets)
-      }
-    })
 
     // 물리 업데이트 루프
     this.engine.timing.timeScale = 1.0
@@ -93,6 +80,22 @@ export class MatterRoom extends Room<State> {
         } else if (this.state.playerBullets.has(labelB) || this.state.npcBullets.has(labelB)) {
           this.handleBulletCollision(labelB, labelA)
         }
+      }
+    })
+  }
+
+  onCreate() {
+    this.onMessage('move', (client, data) => {
+      if (this.playerController) {
+        this.playerController.handleMove(client, data)
+      }
+    })
+    this.onMessage('position_sync', this.handlePositionSync.bind(this))
+    this.onMessage('toggle_debug', this.handleToggleDebug.bind(this))
+    this.onMessage('get_debug_bodies', this.handleGetDebugBodies.bind(this))
+    this.onMessage('shoot_bullet', (client, data) => {
+      if (this.playerController) {
+        this.playerController.shootBullet(client, data, this.state.playerBullets)
       }
     })
   }
