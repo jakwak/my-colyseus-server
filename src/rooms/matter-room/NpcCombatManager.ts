@@ -253,13 +253,12 @@ export class NpcCombatManager {
       // Leader는 플레이어를 향해 사격
       return this.shootAtPlayer(npcId)
     } else {
-      // Follower는 기존 방식대로 이동 방향으로 사격
-      return this.shootInMovementDirectionOriginal(npcId)
+      // Follower는 이동 방향으로 사격
+      return this.shootInDirection(npcId)
     }
   }
 
-  // 기존 이동 방향 사격 로직을 별도 메서드로 분리
-  private shootInMovementDirectionOriginal(npcId: string): string | null {
+  private shootInDirection(npcId: string): string | null {
     const currentTime = Date.now()
     const lastShoot = this.lastShootTime.get(npcId) || 0
     
@@ -333,7 +332,7 @@ export class NpcCombatManager {
         const detectedPlayer = this.detectPlayerInMovementDirection(npcId)
         
         if (detectedPlayer && detectedPlayer.distance <= this.shootingRange) {
-          this.shootInMovementDirectionOriginal(npcId)
+          this.shootInDirection(npcId)
         }
       } else {
         // Leader는 사격 범위 내 플레이어를 직접 타겟팅

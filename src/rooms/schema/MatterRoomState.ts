@@ -10,10 +10,11 @@ export class Player extends Schema {
 }
 
 export class Npc extends Schema {
+  @type("string") owner_id: string = "";
+  @type("string") id: string = "";  
+  @type("string") type: string = ""; 
   @type("number") x: number = 0;
   @type("number") y: number = 0;
-  @type("string") owner_id: string = "";
-  @type("string") id: string = "";
   @type("number") size: number = 1;
   @type("string") shape: string = "circle"; // 예: "rectangle", "circle" 등
   @type("number") power: number = 0;

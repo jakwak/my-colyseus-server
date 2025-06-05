@@ -48,7 +48,7 @@ export function createNpcBody(world: Matter.World, id: string, x: number, y: num
     frictionAir: 0.01,
     collisionFilter: {
       category: CATEGORY_NPC,
-      mask: CATEGORY_PLAYER | CATEGORY_WALL | CATEGORY_BULLET // NPC는 플레이어, 벽, 총알과만 충돌
+      mask: CATEGORY_WALL | CATEGORY_BULLET // NPC는 플레이어, 벽, 총알과만 충돌
     }
   });
   Matter.World.add(world, body);

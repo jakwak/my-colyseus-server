@@ -108,6 +108,9 @@ export function getFormationTargetForFollower(
     const forwardY = Math.sin(leaderAngle);
     if (followerIds.length % 2 === 1 && myIdx === Math.floor(centerIdx + 0.5)) {
       return { x: leaderPos.x + forwardX * baseDistance, y: leaderPos.y + forwardY * baseDistance };
+    } else if (followerIds.length % 2 === 0 && (myIdx === Math.floor(centerIdx) || myIdx === Math.ceil(centerIdx))) {
+      const sideOffset = myIdx === Math.floor(centerIdx) ? -30 : 30;
+      return { x: leaderPos.x + perpX * sideOffset, y: leaderPos.y + perpY * sideOffset };
     } else {
       return { x: leaderPos.x + perpX * offset, y: leaderPos.y + perpY * offset };
     }

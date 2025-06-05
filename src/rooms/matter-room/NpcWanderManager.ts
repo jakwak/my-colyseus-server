@@ -44,6 +44,7 @@ export class NpcWanderManager extends NpcBaseController {
       Matter.World.add(this.world, npcBody);
       const npc = new Npc();
       npc.id = leader_id;
+      npc.type = 'leader';
       npc.x = x;
       npc.y = y;
       npc.size = size;
@@ -59,7 +60,8 @@ export class NpcWanderManager extends NpcBaseController {
       if (followerCount && followerSize) {
         const formationTypes: NpcFormationType[] = ["v", "line", "escort", "scatter", "hline"];
         const randomFormation = formationTypes[Math.floor(Math.random() * formationTypes.length)];
-        const followerManager = new NpcFollowerManager(this.world, this.npcs, leader_id, randomFormation, this.statePlayers, this.bullets);        followerManager.statePlayers = this.statePlayers;
+        const followerManager = new NpcFollowerManager(this.world, this.npcs, leader_id, randomFormation, this.statePlayers, this.bullets);        
+        followerManager.statePlayers = this.statePlayers;
         followerManager.spawnFollowers(followerCount, followerSize);
         this.followerManagers.push(followerManager);
       }
@@ -75,7 +77,6 @@ export class NpcWanderManager extends NpcBaseController {
       let target = this.npcTargets.get(id);
       let dir = this.npcDirs.get(id) || { x: 1, y: 0 };
 
-      // ===== 플레이어 감지: 이동 방향으로 플레이어가 있으면 임시 타겟 지정 =====
       const detectedPlayer = this.combatManager?.detectPlayerInMovementDirection(id);
       if (detectedPlayer && detectedPlayer.distance <= 400) {
         for (const fm of this.followerManagers) {
@@ -89,7 +90,6 @@ export class NpcWanderManager extends NpcBaseController {
         }
       }
 
-      // ===== 기존 장애물 감지 및 회피 =====
       if (detectObstacles(this.world, npcBody, dir, this.statePlayers)) {
         const newDir = calculateAvoidanceDirection(dir);
         const angleDiff = Math.abs(Math.atan2(newDir.y, newDir.x) - Math.atan2(dir.y, dir.x));
@@ -149,7 +149,6 @@ export class NpcWanderManager extends NpcBaseController {
       if (shouldReturn) {
         fm.temporaryTargetActive = false;
         fm.returningToFormation = true;
-        fm.tempTargetOffsets.clear();
         fm.temporaryTargetActivatedAt = null;
         fm.temporaryTargetPlayerId = null;
         fm.disableCombat()

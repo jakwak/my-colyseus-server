@@ -29,8 +29,6 @@ export function detectObstacles(world: Matter.World, npcBody: Matter.Body, dir: 
     );
     if (collisions.length > 0) found = true;
   }
-  // 플레이어 감지 (이 부분은 필요시 분리)
-  // ... (플레이어 감지 로직은 NpcWanderManager에서 직접 처리하는 것이 더 명확할 수 있음) ...
   return found;
 }
 

@@ -20,8 +20,7 @@ export class MatterRoom extends Room<State> {
   private engine: Matter.Engine
   private world: Matter.World
   private npcWanderManager: NpcWanderManager | null = null
-  private cleanupTimer?: NodeJS.Timeout  // 방 정리 지연 타이머
-  private isDisposing: boolean = false   // 방 정리 중인지 체크
+  private isDisposing: boolean = false // 방 정리 중인지 체크
   private playerController: PlayerController | null = null
 
   constructor() {
@@ -33,7 +32,12 @@ export class MatterRoom extends Room<State> {
     addWalls(this.world)
 
     // NPC 매니저 초기화
-    this.npcWanderManager = new NpcWanderManager(this.world, this.state.npcs, this.state.players, this.state.npcBullets)
+    this.npcWanderManager = new NpcWanderManager(
+      this.world,
+      this.state.npcs,
+      this.state.players,
+      this.state.npcBullets
+    )
 
     // NPC 및 팔로워 생성 (1초 간격 5회)
     let spawnCount = 0
@@ -41,7 +45,7 @@ export class MatterRoom extends Room<State> {
       this.npcWanderManager.spawnNpcs(
         1,
         25,
-        Math.floor(Math.random() * 7) + 3,
+        Math.floor(Math.random() * 8) + 4,
         10
       )
       spawnCount++
@@ -75,9 +79,15 @@ export class MatterRoom extends Room<State> {
       for (const pair of event.pairs) {
         const labelA = pair.bodyA.label
         const labelB = pair.bodyB.label
-        if (this.state.playerBullets.has(labelA) || this.state.npcBullets.has(labelA)) {
+        if (
+          this.state.playerBullets.has(labelA) ||
+          this.state.npcBullets.has(labelA)
+        ) {
           this.handleBulletCollision(labelA, labelB)
-        } else if (this.state.playerBullets.has(labelB) || this.state.npcBullets.has(labelB)) {
+        } else if (
+          this.state.playerBullets.has(labelB) ||
+          this.state.npcBullets.has(labelB)
+        ) {
           this.handleBulletCollision(labelB, labelA)
         }
       }
@@ -95,13 +105,17 @@ export class MatterRoom extends Room<State> {
     this.onMessage('get_debug_bodies', this.handleGetDebugBodies.bind(this))
     this.onMessage('shoot_bullet', (client, data) => {
       if (this.playerController) {
-        this.playerController.shootBullet(client, data, this.state.playerBullets)
+        this.playerController.shootBullet(
+          client,
+          data,
+          this.state.playerBullets
+        )
       }
     })
   }
 
   private handleBulletCollision(bulletId: string, npcId: string) {
-    if (!bulletId) return;
+    if (!bulletId) return
     let bullet = this.state.playerBullets.get(bulletId)
     if (!bullet) bullet = this.state.npcBullets.get(bulletId)
     if (!bullet || bullet.owner_id === npcId) return
@@ -161,13 +175,6 @@ export class MatterRoom extends Room<State> {
     client: Client,
     options?: { x?: number; y?: number; username?: string }
   ) {
-    // 새 플레이어가 들어오면 방 정리 타이머 취소
-    if (this.cleanupTimer) {
-      console.log('새 플레이어 입장으로 방 정리 타이머를 취소합니다.')
-      clearTimeout(this.cleanupTimer)
-      this.cleanupTimer = undefined
-    }
-    
     // 클라이언트에서 전달한 시작 위치 사용 (없으면 디폴트)
     const startPos =
       options && options.x !== undefined && options.y !== undefined
@@ -202,15 +209,17 @@ export class MatterRoom extends Room<State> {
     }
 
     console.log(`플레이어 ${client.sessionId} 퇴장 시작`)
-    
+
     // State의 메서드로 색상 반환
     const player = this.state.players.get(client.sessionId)
     if (player && player.color) {
       this.state.returnColorToPool(player.color)
     }
-    
+
     // 올바른 라벨로 플레이어 바디 찾기 및 제거
-    const body = this.world.bodies.find((b) => b.label === `player_${client.sessionId}`)
+    const body = this.world.bodies.find(
+      (b) => b.label === `player_${client.sessionId}`
+    )
     if (body) {
       try {
         Matter.World.remove(this.world, body)
@@ -219,15 +228,16 @@ export class MatterRoom extends Room<State> {
         console.error(`플레이어 ${client.sessionId} 바디 제거 중 오류:`, error)
       }
     }
-    
+
     // 플레이어가 소유한 총알들 제거
-    const playerBullets = Array.from(this.state.playerBullets.entries())
-      .filter(([_, bullet]) => bullet.owner_id === client.sessionId)
-    
+    const playerBullets = Array.from(this.state.playerBullets.entries()).filter(
+      ([_, bullet]) => bullet.owner_id === client.sessionId
+    )
+
     for (const [bulletId, _] of playerBullets) {
       this.removeBullet(bulletId)
     }
-    
+
     // 플레이어 상태에서 제거
     this.state.players.delete(client.sessionId)
     console.log(`플레이어 ${client.sessionId} 상태에서 제거됨`)
@@ -239,11 +249,13 @@ export class MatterRoom extends Room<State> {
   }
 
   private removeBullet(bulletId: string) {
-    if (!bulletId) return;
+    if (!bulletId) return
     // Matter.js 바디도 안전하게 삭제
     const body = this.world.bodies.find((b) => b.label === bulletId)
     if (body) {
-      try { Matter.World.remove(this.world, body) } catch {}
+      try {
+        Matter.World.remove(this.world, body)
+      } catch {}
     }
     // MapSchema에서 존재할 때만 삭제
     if (this.state.playerBullets.has(bulletId)) {
@@ -269,22 +281,11 @@ export class MatterRoom extends Room<State> {
   // 방 정리를 지연시키는 메서드 (새로 추가)
   private scheduleRoomCleanup() {
     console.log('방 정리 스케줄링 시작')
-    
-    // 기존 타이머가 있다면 취소 (중복 방지)
-    if (this.cleanupTimer) {
-      clearTimeout(this.cleanupTimer)
-      this.cleanupTimer = undefined
+
+    if (this.state.players.size === 0 && !this.isDisposing) {
+      console.log('방이 비어있어 즉시 정리를 시작합니다.')
+      this.cleanupRoom()
     }
-    
-    // 5초 후에 방이 여전히 비어있으면 삭제
-    this.cleanupTimer = setTimeout(() => {
-      if (this.state.players.size === 0 && !this.isDisposing) {
-        console.log('5초 후에도 방이 비어있어 정리를 시작합니다.')
-        this.cleanupRoom()
-      } else {
-        console.log('새 플레이어가 들어와서 방 정리를 취소합니다.')
-      }
-    }, 5000) // 5초 지연
   }
 
   // 방 리소스 정리 메서드 (수정됨)
@@ -293,25 +294,19 @@ export class MatterRoom extends Room<State> {
       console.log('이미 방 정리가 진행 중입니다.')
       return
     }
-    
+
     this.isDisposing = true // 정리 시작 플래그 설정
     console.log('방 리소스 정리를 시작합니다.')
-    
+
     try {
-      // 타이머 정리
-      if (this.cleanupTimer) {
-        clearTimeout(this.cleanupTimer)
-        this.cleanupTimer = undefined
-      }
-      
       // NPC 매니저 정리
       if (this.npcWanderManager) {
-        this.npcWanderManager.followerManagers.forEach(manager => {
-          // 각 팔로워 매니저의 리소스 정리가 필요하다면 여기서 처리
+        this.npcWanderManager.followerManagers.forEach((manager) => {
+          manager.cleanup() // 각 팔로워 매니저의 타이머 정리
         })
         this.npcWanderManager = null
       }
-      
+
       // 모든 총알 제거
       const allPlayerBullets = Array.from(this.state.playerBullets.keys())
       for (const bulletId of allPlayerBullets) {
@@ -321,20 +316,19 @@ export class MatterRoom extends Room<State> {
       for (const bulletId of allNpcBullets) {
         this.removeBullet(bulletId)
       }
-      
+
       // 모든 NPC 제거
       const allNpcs = Array.from(this.state.npcs.keys())
       for (const npcId of allNpcs) {
         this.removeNpc(npcId)
       }
-      
+
       console.log('방 리소스 정리 완료, 방을 삭제합니다.')
-      
+
       // 약간의 지연 후 방 삭제
       setTimeout(() => {
         this.disconnect()
       }, 100)
-      
     } catch (error) {
       console.error('방 정리 중 오류 발생:', error)
       this.disconnect() // 오류가 발생해도 방은 삭제
@@ -344,9 +338,5 @@ export class MatterRoom extends Room<State> {
   // 방이 완전히 종료될 때 타이머 정리 (새로 추가)
   onDispose() {
     console.log('방이 완전히 종료됩니다.')
-    if (this.cleanupTimer) {
-      clearTimeout(this.cleanupTimer)
-      this.cleanupTimer = undefined
-    }
   }
 }
