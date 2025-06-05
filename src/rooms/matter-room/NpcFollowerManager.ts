@@ -270,14 +270,21 @@ export class NpcFollowerManager extends NpcBaseController {
       } else {
         const moveAngle = evadeState.angle;
         const speed = 2;
-        Matter.Body.setVelocity(followerBody, {
-          x: Math.cos(moveAngle) * speed,
-          y: Math.sin(moveAngle) * speed,
-        });
-        npc.x = followerBody.position.x;
-        npc.y = SCREEN_HEIGHT - followerBody.position.y;
-        npc.dirx = Math.cos(moveAngle);
-        npc.diry = Math.sin(moveAngle) * 0.5;
+        
+        // 회피 방향으로 이동할 목표 위치 계산
+        const targetX = followerBody.position.x + Math.cos(moveAngle) * 100;
+        const targetY = followerBody.position.y + Math.sin(moveAngle) * 100;
+        
+        // moveFollowerToTarget 함수를 사용하여 안전하게 이동
+        this.moveFollowerToTarget(
+          followerBody,
+          npc,
+          { x: targetX, y: targetY },
+          moveAngle,
+          speed,
+          true,
+          speed
+        );
         return;
       }
     }
