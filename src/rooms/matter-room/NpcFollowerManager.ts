@@ -33,6 +33,9 @@ export class NpcFollowerManager extends NpcBaseController {
   private leaderManager: NpcLeaderManager
   private formationChangeTimer: NodeJS.Timeout | null = null
 
+  // WanderManager 참조 추가
+  private wanderManager: any = null
+
   constructor(
     world: Matter.World,
     npcs: MapSchema<Npc>,
@@ -67,11 +70,14 @@ export class NpcFollowerManager extends NpcBaseController {
       1 // speedMultiplier
     )
 
+    // 리더 매니저 초기화 시 콜백 전달
     this.leaderManager = new NpcLeaderManager(
       world,
       npcs,
       this.myNpcIds,
-      this.leaderId
+      this.leaderId,
+      100, // election delay
+      this.onLeaderChanged.bind(this) // 콜백 함수 전달
     )
 
     // 전투 매니저 초기화
@@ -107,6 +113,30 @@ export class NpcFollowerManager extends NpcBaseController {
         this.formationManager.assignRole(id, index, this.myNpcIds.size)
       })
     }, 10000) // 10초마다 실행
+  }
+  // 리더 변경 콜백 함수
+  private onLeaderChanged(oldLeaderId: string, newLeaderId: string) {
+    console.log(
+      `[FOLLOWER] 리더 변경 콜백 받음: ${oldLeaderId} -> ${newLeaderId}`
+    )
+
+    // 1. 자체 리더 ID 업데이트
+    this.changeLeader(newLeaderId)
+
+    // 2. WanderManager에게 새 리더 등록 요청
+    if (this.wanderManager) {
+      console.log(
+        `[FOLLOWER] WanderManager에 새 리더 등록 요청: ${newLeaderId}`
+      )
+      this.wanderManager.registerNewLeader(newLeaderId, oldLeaderId)
+    } else {
+      console.log(`[FOLLOWER] WanderManager 참조가 없습니다!`)
+    }
+  }
+
+  // WanderManager 참조 설정 메서드 추가
+  public setWanderManager(wanderManager: any) {
+    this.wanderManager = wanderManager
   }
 
   spawnFollowers(count: number, size: number) {
@@ -158,18 +188,40 @@ export class NpcFollowerManager extends NpcBaseController {
   moveAllFollowers(deltaTime: number) {
     const leader = this.npcs.get(this.leaderId)
     const leaderBody = this.world.bodies.find((b) => b.label === this.leaderId)
-    
+
     if (!leader || !leaderBody) {
       // 리더가 없을 때 새 리더 선출 처리
       this.leaderManager.handleLeaderlessState(deltaTime)
       return
     }
-    
-    // 리더 선출이 완료되었으면 정상 진행
+
+    // 리더 변경 확인
+    if (this.leaderManager.checkAndResetLeaderChanged()) {
+      const newLeaderId = this.leaderManager.getLeaderId()
+      console.log(
+        `[FOLLOWER] 리더 변경 감지: ${this.leaderId} -> ${newLeaderId}`
+      )
+
+      // WanderManager에게 새 리더 등록 요청
+      if (this.wanderManager) {
+        console.log(
+          `[FOLLOWER] WanderManager에 새 리더 등록 요청: ${newLeaderId}`
+        )
+        this.wanderManager.registerNewLeader(newLeaderId, this.leaderId)
+      } else {
+        console.log(`[FOLLOWER] WanderManager 참조가 없습니다!`)
+      }
+
+      // 자체 리더 ID 업데이트
+      this.changeLeader(newLeaderId)
+      return
+    }
+
+    // 리더 선출이 진행 중이면 대기
     if (this.leaderManager.isLeaderElectionInProgress()) {
       return
     }
-    
+
     // 기존 로직 계속...
     const leaderPos = leaderBody.position
     const leaderVelocity = leaderBody.velocity
@@ -266,15 +318,18 @@ export class NpcFollowerManager extends NpcBaseController {
     const oldLeaderId = this.leaderId
     this.leaderId = newLeaderId
     this.leaderManager.setLeaderId(newLeaderId)
-    
+
     // 모든 팔로워의 owner_id도 업데이트
     this.myNpcIds.forEach((followerId) => {
       const follower = this.npcs.get(followerId)
       if (follower) {
         follower.owner_id = newLeaderId
       }
+      // 새로운 리더에 맞게 역할 재할당
+      const index = Array.from(this.myNpcIds).indexOf(followerId)
+      this.formationManager.assignRole(followerId, index, this.myNpcIds.size)
     })
-    
+
     console.log(`[FOLLOWER] 리더 변경: ${oldLeaderId} -> ${newLeaderId}`)
   }
 

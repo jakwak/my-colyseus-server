@@ -7,15 +7,23 @@ export class NpcLeaderManager {
   private leaderElectionInProgress: boolean = false
   private leaderElectionStartTime: number = 0
   private readonly LEADER_ELECTION_DELAY: number
+  private leaderChanged: boolean = false // 리더 변경 플래그 추가
+  private onLeaderChanged?: (oldLeaderId: string, newLeaderId: string) => void
 
   constructor(
     private world: Matter.World,
     private npcs: MapSchema<Npc>,
     private myNpcIds: Set<string>,
     private leaderId: string,
-    electionDelay: number = 100
+    electionDelay: number = 100,
+    onLeaderChanged?: (oldLeaderId: string, newLeaderId: string) => void // 콜백 매개변수 추가
   ) {
+    this.world = world
+    this.npcs = npcs
+    this.myNpcIds = myNpcIds
+    this.leaderId = leaderId
     this.LEADER_ELECTION_DELAY = electionDelay
+    this.onLeaderChanged = onLeaderChanged // 콜백 저장
   }
 
   public handleLeaderlessState(deltaTime: number) {
@@ -69,6 +77,14 @@ export class NpcLeaderManager {
       
       // 리더 선출 완료
       this.leaderElectionInProgress = false
+      
+      // 콜백 호출 - FollowerManager에게 알림
+      if (this.onLeaderChanged) {
+        console.log(`[LEADER_MANAGER] 콜백 호출: ${oldLeaderId} -> ${newLeaderId}`)
+        this.onLeaderChanged(oldLeaderId, newLeaderId)
+      } else {
+        console.log(`[LEADER_MANAGER] 콜백이 설정되지 않음`)
+      }
       
       console.log(`[FOLLOWER] 리더십 승계 완료: ${oldLeaderId} -> ${newLeaderId}`)
     }
@@ -126,4 +142,13 @@ export class NpcLeaderManager {
   public setLeaderId(newLeaderId: string) {
     this.leaderId = newLeaderId
   }
-} 
+
+  // 리더 변경 여부 확인 및 플래그 리셋
+  public checkAndResetLeaderChanged(): boolean {
+    if (this.leaderChanged) {
+      this.leaderChanged = false
+      return true
+    }
+    return false
+  }
+}

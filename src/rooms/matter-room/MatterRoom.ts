@@ -119,9 +119,15 @@ export class MatterRoom extends Room<State> {
     let bullet = this.state.playerBullets.get(bulletId)
     if (!bullet) bullet = this.state.npcBullets.get(bulletId)
     if (!bullet || bullet.owner_id === npcId) return
+
+    // npcId가 npc_로 시작하는지 확인
+    if (npcId.startsWith('npc_')) {
+      this.removeNpc(npcId)
+    }
+
+    // 총알 제거
     this.removeBullet(bulletId)
   }
-
   private handlePositionSync(client: Client, data: any) {
     const player = this.state.players.get(client.sessionId)
     if (player) {
@@ -243,9 +249,9 @@ export class MatterRoom extends Room<State> {
     console.log(`플레이어 ${client.sessionId} 상태에서 제거됨`)
 
     // 모든 플레이어가 나가면 지연 삭제 스케줄링
-    if (this.state.players.size === 0) {
-      this.scheduleRoomCleanup()
-    }
+    // if (this.state.players.size === 0) {
+    //   this.scheduleRoomCleanup()
+    // }
   }
 
   private removeBullet(bulletId: string) {
@@ -267,15 +273,30 @@ export class MatterRoom extends Room<State> {
   }
 
   private removeNpc(npcId: string) {
+    // npcId가 npc_로 시작하는지 확인
+    if (!npcId.startsWith('npc_')) {
+      console.error(`[NPC] 올바르지 않은 NPC ID: ${npcId}`)
+      return
+    }
+
     // 물리 엔진에서 바디 제거
     const npcBody = this.world.bodies.find((body) => body.label === npcId)
     if (npcBody) {
-      Matter.World.remove(this.world, npcBody)
-      console.log(`[NPC BODY] ${npcId} 제거됨`)
+      this.broadcast('npc_die_animation', { npcId: npcId })
+      setTimeout(() => {
+        // 바디의 모든 속성 제거
+        Matter.Body.setStatic(npcBody, true)
+        Matter.Body.setVelocity(npcBody, { x: 0, y: 0 })
+        Matter.Body.setAngularVelocity(npcBody, 0)
+        Matter.Body.setPosition(npcBody, { x: 0, y: 0 })
+
+        // 월드에서 제거
+        Matter.World.remove(this.world, npcBody)
+
+        // NPC 상태에서 제거
+        this.state.npcs.delete(npcId)
+      }, 1000)
     }
-    // NPC 상태에서 제거
-    this.state.npcs.delete(npcId)
-    console.log(`[NPC] ${npcId} 상태에서 제거됨`)
   }
 
   // 방 정리를 지연시키는 메서드 (새로 추가)

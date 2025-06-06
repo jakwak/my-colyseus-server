@@ -34,6 +34,27 @@ export class NpcWanderManager extends NpcBaseController {
     return npcIds[Math.floor(Math.random() * npcIds.length)]
   }
 
+  // 새 리더 등록 메서드 추가
+  public registerNewLeader(newLeaderId: string, oldLeaderId: string) {
+    console.log(`[WANDER] 새 리더 등록 요청 받음: ${newLeaderId} (이전: ${oldLeaderId})`)
+    
+    // 1. 새 리더를 wandering NPC 목록에 추가
+    this.myNpcIds.add(newLeaderId)
+    
+    // 2. 새 리더의 초기 방향과 타겟 설정
+    this.npcDirs.set(newLeaderId, { x: 1, y: 0 })
+    
+    const newLeader = this.npcs.get(newLeaderId)
+    if (newLeader) {
+      // 현재 위치 근처에서 새로운 타겟 설정
+      const target = getRandomTargetNear(newLeader.x, newLeader.y, NPC_MOVE_RADIUS, { x: 1, y: 0 })
+      this.npcTargets.set(newLeaderId, target)
+      console.log(`[WANDER] 새 리더 ${newLeaderId} wandering 시작, 타겟: (${target.x}, ${target.y})`)
+    } else {
+      console.log(`[WANDER] 새 리더 ${newLeaderId}를 찾을 수 없음`)
+    }
+  }
+
   // 여러 그룹을 독립적으로 관리 (각 wander NPC마다 별도의 followerManager)
   public spawnNpcs(count: number, size: number, followerCount?: number, followerSize?: number) {
     for (let i = 0; i < count; i++) {
@@ -58,11 +79,20 @@ export class NpcWanderManager extends NpcBaseController {
       this.npcTargets.set(leader_id, getRandomTargetNear(x, y, NPC_MOVE_RADIUS, { x: 1, y: 0 }));
       
       if (followerCount && followerSize) {
-        const formationTypes: NpcFormationType[] = ["v", "line", "escort", "scatter", "hline"];
-        const randomFormation = formationTypes[Math.floor(Math.random() * formationTypes.length)];
-        const followerManager = new NpcFollowerManager(this.world, this.npcs, leader_id, randomFormation, this.statePlayers, this.bullets);        
-        followerManager.statePlayers = this.statePlayers;
+        const followerManager = new NpcFollowerManager(
+          this.world,
+          this.npcs,
+          leader_id,
+          'v',
+          this.statePlayers,
+          this.bullets
+        );
+        
+        // WanderManager 참조 설정
+        followerManager.setWanderManager(this);
+        
         followerManager.spawnFollowers(followerCount, followerSize);
+        followerManager.enableCombat();
         this.followerManagers.push(followerManager);
       }
     }
@@ -122,7 +152,13 @@ export class NpcWanderManager extends NpcBaseController {
         this.npcTargets.set(id, newTarget);
         continue;
       }
-      this.moveNpcToTarget(id, target, { speed: NPC_SPEED });
+
+      if (id.includes('follower')) {
+        this.moveNpcToTarget(id, target, { speed: NPC_SPEED*2 });
+      } else {
+        this.moveNpcToTarget(id, target, { speed: NPC_SPEED });
+      }
+      
       const dx2 = target.x - npcBody.position.x;
       const dy2 = target.y - npcBody.position.y;
       const dist2 = Math.sqrt(dx2 * dx2 + dy2 * dy2);

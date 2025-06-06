@@ -2,7 +2,7 @@ import Matter from 'matter-js'
 import { MapSchema } from '@colyseus/schema'
 import { Player, Bullet } from '../schema/MatterRoomState'
 import { Client } from 'colyseus'
-import { moveBody, matterToDefold, SCREEN_WIDTH, SCREEN_HEIGHT } from './physics'
+import { matterToDefold, SCREEN_WIDTH, SCREEN_HEIGHT, CATEGORY_BULLET, CATEGORY_WALL, CATEGORY_NPC } from './physics'
 
 /**
  * 플레이어 컨트롤러 (비행기 선회 이동)
@@ -233,7 +233,7 @@ export class PlayerController {
     if (!player) return
     const body = this.world.bodies.find((b) => b.label === 'player_' + client.sessionId)
     if (!body) return
-    const bulletId = `bullet_${Date.now()}_${Math.floor(Math.random() * 10000)}`
+    const bulletId = `player_bullet_${Date.now()}_${Math.floor(Math.random() * 10000)}`
     const { type, x, y, dirx, diry, power, velocity } = data
     // Matter.js 바디 생성
     const radius = 5
@@ -241,6 +241,10 @@ export class PlayerController {
       label: bulletId,
       isSensor: true,
       frictionAir: 0,
+      collisionFilter: {
+        category: CATEGORY_BULLET,
+        mask: CATEGORY_WALL | CATEGORY_NPC,
+      },
     })
     Matter.Body.setVelocity(bulletBody, {
       x: dirx * velocity,
