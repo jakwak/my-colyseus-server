@@ -28,6 +28,7 @@ export class NpcCombatManager {
   private detectionRange: number = 500 // 감지 범위
   private shootingRange: number = 500 // 사격 범위
   private shootCooldown: number = 1000 // 총알 쿨다운
+  private missileShootCooldown: number = 2000 // 미사일 쿨다운
   private bulletSpeed: number = 5 // 총알 속도
 
   // NPC별 마지막 사격 시간 추적
@@ -185,7 +186,7 @@ export class NpcCombatManager {
     const lastShoot = this.lastShootTime.get(npcId) || 0
 
     // 쿨다운 체크
-    if (currentTime - lastShoot < this.shootCooldown) return null
+    if (currentTime - lastShoot < this.missileShootCooldown) return null
 
     const npc = this.npcs.get(npcId)
     if (!npc) return null
@@ -260,7 +261,7 @@ export class NpcCombatManager {
     // State에 미사일 추가
     const missile = new Bullet()
     missile.id = missileId
-    missile.type = 'missile' // 미사일 타입으로 설정
+    missile.type = 'npc_missile' // 미사일 타입으로 설정
     missile.x = startX
     missile.y = startY
     missile.dirx = dirX
