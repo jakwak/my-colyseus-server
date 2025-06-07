@@ -27,7 +27,7 @@ export class NpcCombatManager {
   // 전투 설정
   private detectionRange: number = 500 // 감지 범위
   private shootingRange: number = 500 // 사격 범위
-  private shootCooldown: number = 800 // 총알 쿨다운
+  private shootCooldown: number = 1000 // 총알 쿨다운
   private bulletSpeed: number = 5 // 총알 속도
 
   // NPC별 마지막 사격 시간 추적
@@ -36,6 +36,17 @@ export class NpcCombatManager {
   // NPC별 이전 위치 저장 (이동 방향 계산용)
   private npcPreviousPositions: Map<string, { x: number; y: number }> =
     new Map()
+
+  private homingBullets: Map<
+    string,
+    {
+      bulletId: string
+      targetPlayerId: string
+      speed: number
+      turnSpeed: number
+      maxTurnAngle: number
+    }
+  > = new Map()
 
   constructor(
     world: Matter.World,
@@ -168,18 +179,6 @@ export class NpcCombatManager {
       : null
   }
 
-  // 클래스 상단에 맵 추가
-  private homingBullets: Map<
-    string,
-    {
-      bulletId: string
-      targetPlayerId: string
-      speed: number
-      turnSpeed: number
-      maxTurnAngle: number
-    }
-  > = new Map()
-
   // NPC가 플레이어를 향해 총알 발사
   public shootAtPlayer(npcId: string, targetPlayerId?: string): string | null {
     const currentTime = Date.now()
@@ -213,211 +212,151 @@ export class NpcCombatManager {
     }
 
     if (!targetPlayer) return null
+    // 미사일 발사 예시 코드
+    // 미사일 생성
+    const missileId = `npc_missile_${currentTime}_${Math.floor(
+      Math.random() * 1000
+    )}`
 
     // // 플레이어 방향 계산
-    // const deltaX = targetPlayer.x - npc.x
-    // const deltaY = targetPlayer.y - npc.y
-    // const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY)
+    const deltaX = targetPlayer.x - npc.x
+    const deltaY = targetPlayer.y - npc.y
+    const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY)
 
-    // if (distance === 0) return null
+    if (distance === 0) return null
 
-    // // 정규화된 방향 벡터
-    // const dirX = deltaX / distance
-    // const dirY = deltaY / distance
+    // 정규화된 방향 벡터
+    const dirX = deltaX / distance
+    const dirY = deltaY / distance
 
-    // // 총알 생성
-    // const bulletId = `npc_bullet_${currentTime}_${Math.floor(Math.random() * 1000)}`
+    // 미사일 시작 위치
+    const startX = npc.x
+    const startY = npc.y
 
-    // // 총알 시작 위치
-    // const startX = npc.x
-    // const startY = npc.y
+    // Matter.js 바디 생성 (Matter 좌표계)
+    const missileBody = Matter.Bodies.circle(
+      startX,
+      SCREEN_HEIGHT - startY,
+      4,
+      {
+        label: missileId,
+        isSensor: true,
+        frictionAir: 0,
+        collisionFilter: {
+          category: CATEGORY_BULLET,
+          mask: CATEGORY_PLAYER | CATEGORY_WALL,
+        },
+      }
+    )
 
-    // // Matter.js 바디 생성 (Matter 좌표계)
-    // const bulletBody = Matter.Bodies.circle(startX, SCREEN_HEIGHT - startY, 3, {
-    //   label: bulletId,
-    //   isSensor: true,
-    //   frictionAir: 0,
-    //   collisionFilter: {
-    //     category: CATEGORY_BULLET,
-    //     mask: CATEGORY_PLAYER | CATEGORY_WALL
-    //   }
-    // })
+    // 초기 속도 설정 (플레이어 방향으로)
+    Matter.Body.setVelocity(missileBody, {
+      x: dirX * this.bulletSpeed,
+      y: -dirY * this.bulletSpeed,
+    })
 
-    // // 속도 적용 (플레이어 방향으로)
-    // Matter.Body.setVelocity(bulletBody, {
-    //   x: dirX * this.bulletSpeed,
-    //   y: -dirY * this.bulletSpeed // Y축 반전 (Matter 좌표계)
-    // })
+    Matter.World.add(this.world, missileBody)
 
-    // Matter.World.add(this.world, bulletBody)
+    // State에 미사일 추가
+    const missile = new Bullet()
+    missile.id = missileId
+    missile.type = 'missile' // 미사일 타입으로 설정
+    missile.x = startX
+    missile.y = startY
+    missile.dirx = dirX
+    missile.diry = dirY * -1
+    missile.power = 20 // 일반 총알보다 강하게
+    missile.velocity = this.bulletSpeed
+    missile.owner_id = npcId
 
-    // // State에 총알 추가
-    // const bullet = new Bullet()
-    // bullet.id = bulletId
-    // bullet.type = 'npc_bullet'
-    // bullet.x = startX
-    // bullet.y = startY
-    // bullet.dirx = dirX
-    // bullet.diry = dirY * -1
-    // bullet.power = 10
-    // bullet.velocity = this.bulletSpeed
-    // bullet.owner_id = npcId
+    this.bullets.set(missileId, missile)
 
-    // this.bullets.set(bulletId, bullet)
+    // 미사일 정보 저장 (호밍 기능용)
+    this.homingBullets.set(missileId, {
+      bulletId: missileId,
+      targetPlayerId: targetPlayerId_actual,
+      speed: this.bulletSpeed * 0.5,
+      turnSpeed: 0.1, // 회전 속도
+      maxTurnAngle: Math.PI / 4, // 최대 회전 각도 (10도)
+    })
 
-    // // 쿨다운 업데이트
-    // this.lastShootTime.set(npcId, currentTime)
+    // 쿨다운 업데이트
+    this.lastShootTime.set(npcId, currentTime)
 
-    // return bulletId
-
-    // 미사일 발사 예시 코드
-    if (targetPlayer) {
-      // 미사일 생성
-      const missileId = `npc_missile_${currentTime}_${Math.floor(
-        Math.random() * 1000
-      )}`
-
-      // // 플레이어 방향 계산
-      const deltaX = targetPlayer.x - npc.x
-      const deltaY = targetPlayer.y - npc.y
-      const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY)
-
-      if (distance === 0) return null
-
-      // 정규화된 방향 벡터
-      const dirX = deltaX / distance
-      const dirY = deltaY / distance
-
-      // 미사일 시작 위치
-      const startX = npc.x
-      const startY = npc.y
-
-      // Matter.js 바디 생성 (Matter 좌표계)
-      const missileBody = Matter.Bodies.circle(
-        startX,
-        SCREEN_HEIGHT - startY,
-        4,
-        {
-          label: missileId,
-          isSensor: true,
-          frictionAir: 0,
-          collisionFilter: {
-            category: CATEGORY_BULLET,
-            mask: CATEGORY_PLAYER | CATEGORY_WALL,
-          },
-        }
-      )
-
-      // 초기 속도 설정 (플레이어 방향으로)
-      Matter.Body.setVelocity(missileBody, {
-        x: dirX * this.bulletSpeed,
-        y: -dirY * this.bulletSpeed,
-      })
-
-      Matter.World.add(this.world, missileBody)
-
-      // State에 미사일 추가
-      const missile = new Bullet()
-      missile.id = missileId
-      missile.type = 'missile' // 미사일 타입으로 설정
-      missile.x = startX
-      missile.y = startY
-      missile.dirx = dirX
-      missile.diry = dirY * -1
-      missile.power = 20 // 일반 총알보다 강하게
-      missile.velocity = this.bulletSpeed
-      missile.owner_id = npcId
-
-      this.bullets.set(missileId, missile)
-
-      // 미사일 정보 저장 (호밍 기능용)
-      this.homingBullets.set(missileId, {
-        bulletId: missileId,
-        targetPlayerId: targetPlayerId_actual,
-        speed: this.bulletSpeed * 0.5,
-        turnSpeed: 0.1, // 회전 속도
-        maxTurnAngle: Math.PI / 6, // 최대 회전 각도 (30도)
-      })
-
-      // 쿨다운 업데이트
-      this.lastShootTime.set(npcId, currentTime)
-
-      return missileId
-    }
+    return missileId
   }
 
-  
-// 호밍 미사일 업데이트 메서드
-private updateHomingMissiles(deltaTime: number) {
-  for (const [missileId, missileInfo] of this.homingBullets.entries()) {
-      const missileBody = this.world.bodies.find(b => b.label === missileId);
-      const targetPlayer = this.players.get(missileInfo.targetPlayerId);
-      
+  // 호밍 미사일 업데이트 메서드
+  private updateHomingMissiles(deltaTime: number) {
+    for (const [missileId, missileInfo] of this.homingBullets.entries()) {
+      const missileBody = this.world.bodies.find((b) => b.label === missileId)
+      const targetPlayer = this.players.get(missileInfo.targetPlayerId)
+
       if (!missileBody || !targetPlayer) {
-          // 미사일이나 타겟이 없으면 제거
-          this.homingBullets.delete(missileId);
-          if (missileBody) {
-              Matter.World.remove(this.world, missileBody);
-          }
-          continue;
+        // 미사일이나 타겟이 없으면 제거
+        this.homingBullets.delete(missileId)
+        if (missileBody) {
+          Matter.World.remove(this.world, missileBody)
+        }
+        continue
       }
 
       // 현재 미사일 위치
-      const missilePos = missileBody.position;
-      
+      const missilePos = missileBody.position
+
       // 타겟 방향 계산
       const targetPos = {
-          x: targetPlayer.x,
-          y: SCREEN_HEIGHT - targetPlayer.y // Matter 좌표계 변환
-      };
-      
-      const deltaX = targetPos.x - missilePos.x;
-      const deltaY = targetPos.y - missilePos.y;
-      const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
-      
-      if (distance === 0) continue;
-      
+        x: targetPlayer.x,
+        y: SCREEN_HEIGHT - targetPlayer.y, // Matter 좌표계 변환
+      }
+
+      const deltaX = targetPos.x - missilePos.x
+      const deltaY = targetPos.y - missilePos.y
+      const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY)
+
+      if (distance === 0) continue
+
       // 목표 방향 벡터
-      const targetDirX = deltaX / distance;
-      const targetDirY = deltaY / distance;
-      
+      const targetDirX = deltaX / distance
+      const targetDirY = deltaY / distance
+
       // 현재 미사일 방향
-      const currentDirX = missileBody.velocity.x / missileInfo.speed;
-      const currentDirY = missileBody.velocity.y / missileInfo.speed;
-      
+      const currentDirX = missileBody.velocity.x / missileInfo.speed
+      const currentDirY = missileBody.velocity.y / missileInfo.speed
+
       // 회전 각도 계산
-      const currentAngle = Math.atan2(currentDirY, currentDirX);
-      const targetAngle = Math.atan2(targetDirY, targetDirX);
-      let angleDiff = targetAngle - currentAngle;
-      
+      const currentAngle = Math.atan2(currentDirY, currentDirX)
+      const targetAngle = Math.atan2(targetDirY, targetDirX)
+      let angleDiff = targetAngle - currentAngle
+
       // 각도 정규화 (-PI ~ PI)
-      if (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
-      if (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
-      
+      if (angleDiff > Math.PI) angleDiff -= Math.PI * 2
+      if (angleDiff < -Math.PI) angleDiff += Math.PI * 2
+
       // 회전 제한
-      const maxTurn = missileInfo.maxTurnAngle;
-      const turnAmount = Math.sign(angleDiff) * 
-          Math.min(Math.abs(angleDiff), maxTurn);
-      
+      const maxTurn = missileInfo.maxTurnAngle
+      const turnAmount =
+        Math.sign(angleDiff) * Math.min(Math.abs(angleDiff), maxTurn)
+
       // 새로운 방향 계산
-      const newAngle = currentAngle + turnAmount;
-      const newDirX = Math.cos(newAngle);
-      const newDirY = Math.sin(newAngle);
-      
+      const newAngle = currentAngle + turnAmount
+      const newDirX = Math.cos(newAngle)
+      const newDirY = Math.sin(newAngle)
+
       // 속도 업데이트
       Matter.Body.setVelocity(missileBody, {
-          x: newDirX * missileInfo.speed,
-          y: newDirY * missileInfo.speed
-      });
-      
+        x: newDirX * missileInfo.speed,
+        y: newDirY * missileInfo.speed,
+      })
+
       // State 업데이트
-      const bullet = this.bullets.get(missileId);
+      const bullet = this.bullets.get(missileId)
       if (bullet) {
-          bullet.dirx = newDirX;
-          bullet.diry = -newDirY; // Defold 좌표계로 변환
+        bullet.dirx = newDirX
+        bullet.diry = newDirY // Defold 좌표계로 변환
       }
+    }
   }
-}
 
   public shootInMovementDirection(npcId: string): string | null {
     // NPC 타입 확인 (leader인지 follower인지)

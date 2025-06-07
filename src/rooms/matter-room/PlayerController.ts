@@ -33,17 +33,17 @@ export class PlayerController {
     this.bullets = bullets
     this.npcController = npcController
 
-    Matter.Events.on(engine, 'collisionStart', (event) => {
-      for (const pair of event.pairs) {
-        const labelA = pair.bodyA.label
-        const labelB = pair.bodyB.label
-        if (this.bullets.has(labelA)) {
-          this.handleBulletCollision(labelA, labelB)
-        } else if (this.bullets.has(labelB)) {
-          this.handleBulletCollision(labelB, labelA)
-        }
-      }
-    })
+    // Matter.Events.on(engine, 'collisionStart', (event) => {
+    //   for (const pair of event.pairs) {
+    //     const labelA = pair.bodyA.label
+    //     const labelB = pair.bodyB.label
+    //     if (this.bullets.has(labelA)) {
+    //       this.handleBulletCollision(labelA, labelB)
+    //     } else if (this.bullets.has(labelB)) {
+    //       this.handleBulletCollision(labelB, labelA)
+    //     }
+    //   }
+    // })
   }
 
   /**
