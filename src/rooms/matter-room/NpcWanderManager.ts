@@ -7,6 +7,7 @@ import { detectObstacles, calculateAvoidanceDirection } from './NpcObstacleUtils
 import { getRandomTargetNear } from './NpcTargetUtils'
 import { NpcBaseController } from './NpcBaseController'
 import { NpcCombatManager } from './NpcCombatManager'
+import { MatterRoom } from './MatterRoom'
 
 const NPC_MOVE_RADIUS = 1500; // 모든 NPC의 이동 반경(1500)
 const NPC_SPEED = 50; // 모든 NPC의 이동 속도(50)
@@ -18,14 +19,15 @@ export class NpcWanderManager extends NpcBaseController {
   private npcDirs: Map<string, { x: number; y: number }> = new Map(); // 각 NPC별 현재 방향
   private myNpcIds: Set<string> = new Set(); // 이 매니저가 생성한 NPC ID들
   public followerManagers: NpcFollowerManager[] = [] // 각 그룹별 팔로워 매니저
-
+  private statePlayers: MapSchema<Player>;
   private bullets: MapSchema<Bullet>;
   private combatManager?: NpcCombatManager;
 
-  constructor(world: Matter.World, npcs: MapSchema<Npc>, statePlayers: MapSchema<Player>, bullets: MapSchema<Bullet>) {
-    super(world, npcs, statePlayers);
+  constructor(world: Matter.World, npcs: MapSchema<Npc>, bullets: MapSchema<Bullet>, players: MapSchema<Player>) {
+    super(world, npcs);
     this.bullets = bullets;
-    this.combatManager = new NpcCombatManager(world, npcs, statePlayers, bullets);
+    this.combatManager = new NpcCombatManager(world, npcs, players, bullets);
+    this.statePlayers = players;
   }
   // 임의의 NPC ID 반환
   public getRandomNpcId(): string | null {

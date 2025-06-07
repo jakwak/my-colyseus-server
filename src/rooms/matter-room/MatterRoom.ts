@@ -29,35 +29,35 @@ export class MatterRoom extends Room<State> {
     const { engine, world } = createEngineAndWorld()
     this.engine = engine
     this.world = world
+
     addWalls(this.world)
 
     // NPC 매니저 초기화
     this.npcWanderManager = new NpcWanderManager(
       this.world,
       this.state.npcs,
-      this.state.players,
-      this.state.npcBullets
+      this.state.npcBullets,
+      this.state.players
     )
 
-    // NPC 및 팔로워 생성 (1초 간격 5회)
-    let spawnCount = 0
-    const spawnInterval = setInterval(() => {
-      this.npcWanderManager.spawnNpcs(
-        1,
-        25,
-        Math.floor(Math.random() * 8) + 4,
-        10
-      )
-      spawnCount++
-      if (spawnCount >= 5) {
-        clearInterval(spawnInterval)
-      }
-    }, 1000)
+    // // NPC 및 팔로워 생성 (1초 간격 5회)
+    // let spawnCount = 0
+    // const spawnInterval = setInterval(() => {
+    //   this.npcWanderManager.spawnNpcs(
+    //     1,
+    //     25,
+    //     Math.floor(Math.random() * 8) + 4,
+    //     10
+    //   )
+    //   spawnCount++
+    //   if (spawnCount >= 5) {
+    //     clearInterval(spawnInterval)
+    //   }
+    // }, 1000)
 
-    this.playerController = new PlayerController(this.world, this.state.players)
+    this.playerController = new PlayerController(this.engine, this.state.players, this.state.playerBullets, this.npcWanderManager)
 
     // 물리 업데이트 루프
-    this.engine.timing.timeScale = 1.0
     this.setSimulationInterval((deltaTime) => {
       Matter.Engine.update(this.engine, deltaTime)
       if (this.playerController) {
@@ -74,24 +74,6 @@ export class MatterRoom extends Room<State> {
       }
     }, 1000 / 60)
 
-    // 충돌 이벤트 리스너
-    Matter.Events.on(this.engine, 'collisionStart', (event) => {
-      for (const pair of event.pairs) {
-        const labelA = pair.bodyA.label
-        const labelB = pair.bodyB.label
-        if (
-          this.state.playerBullets.has(labelA) ||
-          this.state.npcBullets.has(labelA)
-        ) {
-          this.handleBulletCollision(labelA, labelB)
-        } else if (
-          this.state.playerBullets.has(labelB) ||
-          this.state.npcBullets.has(labelB)
-        ) {
-          this.handleBulletCollision(labelB, labelA)
-        }
-      }
-    })
   }
 
   onCreate() {
@@ -105,29 +87,17 @@ export class MatterRoom extends Room<State> {
     this.onMessage('get_debug_bodies', this.handleGetDebugBodies.bind(this))
     this.onMessage('shoot_bullet', (client, data) => {
       if (this.playerController) {
-        this.playerController.shootBullet(
-          client,
-          data,
-          this.state.playerBullets
-        )
+        this.playerController.shootBullet(client,data)
+      }
+    })
+
+    this.onMessage('spawn_npc', (client, data) => {
+      if (this.npcWanderManager && this.state.npcs.size === 0) {
+        this.npcWanderManager.spawnNpcs(1, 25, Math.floor(Math.random() * 8) + 4, 10)
       }
     })
   }
 
-  private handleBulletCollision(bulletId: string, npcId: string) {
-    if (!bulletId) return
-    let bullet = this.state.playerBullets.get(bulletId)
-    if (!bullet) bullet = this.state.npcBullets.get(bulletId)
-    if (!bullet || bullet.owner_id === npcId) return
-
-    // npcId가 npc_로 시작하는지 확인
-    if (npcId.startsWith('npc_')) {
-      this.removeNpc(npcId)
-    }
-
-    // 총알 제거
-    this.removeBullet(bulletId)
-  }
   private handlePositionSync(client: Client, data: any) {
     const player = this.state.players.get(client.sessionId)
     if (player) {
@@ -235,23 +205,23 @@ export class MatterRoom extends Room<State> {
       }
     }
 
-    // 플레이어가 소유한 총알들 제거
-    const playerBullets = Array.from(this.state.playerBullets.entries()).filter(
-      ([_, bullet]) => bullet.owner_id === client.sessionId
-    )
-
-    for (const [bulletId, _] of playerBullets) {
-      this.removeBullet(bulletId)
-    }
-
     // 플레이어 상태에서 제거
     this.state.players.delete(client.sessionId)
     console.log(`플레이어 ${client.sessionId} 상태에서 제거됨`)
 
-    // 모든 플레이어가 나가면 지연 삭제 스케줄링
-    // if (this.state.players.size === 0) {
-    //   this.scheduleRoomCleanup()
+    // // 플레이어가 소유한 총알들 제거
+    // const playerBullets = Array.from(this.state.playerBullets.entries()).filter(
+    //   ([_, bullet]) => bullet.owner_id === client.sessionId
+    // )
+
+    // for (const [bulletId, _] of playerBullets) {
+    //   this.removeBullet(bulletId)
     // }
+
+    // 모든 플레이어가 나가면 지연 삭제 스케줄링
+    if (this.state.players.size === 0) {
+      this.scheduleRoomCleanup()
+    }
   }
 
   private removeBullet(bulletId: string) {
@@ -275,28 +245,11 @@ export class MatterRoom extends Room<State> {
   private removeNpc(npcId: string) {
     // npcId가 npc_로 시작하는지 확인
     if (!npcId.startsWith('npc_')) {
-      console.error(`[NPC] 올바르지 않은 NPC ID: ${npcId}`)
       return
     }
 
-    // 물리 엔진에서 바디 제거
-    const npcBody = this.world.bodies.find((body) => body.label === npcId)
-    if (npcBody) {
-      this.broadcast('npc_die_animation', { npcId: npcId })
-      setTimeout(() => {
-        // 바디의 모든 속성 제거
-        Matter.Body.setStatic(npcBody, true)
-        Matter.Body.setVelocity(npcBody, { x: 0, y: 0 })
-        Matter.Body.setAngularVelocity(npcBody, 0)
-        Matter.Body.setPosition(npcBody, { x: 0, y: 0 })
-
-        // 월드에서 제거
-        Matter.World.remove(this.world, npcBody)
-
-        // NPC 상태에서 제거
-        this.state.npcs.delete(npcId)
-      }, 1000)
-    }
+    // NPC 컨트롤러를 통해 제거
+    this.npcWanderManager?.removeNpc(npcId)
   }
 
   // 방 정리를 지연시키는 메서드 (새로 추가)

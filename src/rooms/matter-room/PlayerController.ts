@@ -3,6 +3,7 @@ import { MapSchema } from '@colyseus/schema'
 import { Player, Bullet } from '../schema/MatterRoomState'
 import { Client } from 'colyseus'
 import { matterToDefold, SCREEN_WIDTH, SCREEN_HEIGHT, CATEGORY_BULLET, CATEGORY_WALL, CATEGORY_NPC } from './physics'
+import { NpcBaseController } from './NpcBaseController'
 
 /**
  * 플레이어 컨트롤러 (비행기 선회 이동)
@@ -23,10 +24,26 @@ export class PlayerController {
   private thrustPower: number = 2 // 추진력(속도)
   // 플레이어별 목표 위치 (자동 이동용)
   private targetPositions: Map<string, { x: number; y: number }> = new Map()
+  private bullets: MapSchema<Bullet>
+  private npcController: NpcBaseController
 
-  constructor(world: Matter.World, players: MapSchema<Player>) {
-    this.world = world
+  constructor(engine: Matter.Engine, players: MapSchema<Player>, bullets: MapSchema<Bullet>, npcController: NpcBaseController) {
+    this.world = engine.world
     this.players = players
+    this.bullets = bullets
+    this.npcController = npcController
+
+    Matter.Events.on(engine, 'collisionStart', (event) => {
+      for (const pair of event.pairs) {
+        const labelA = pair.bodyA.label
+        const labelB = pair.bodyB.label
+        if (this.bullets.has(labelA)) {
+          this.handleBulletCollision(labelA, labelB)
+        } else if (this.bullets.has(labelB)) {
+          this.handleBulletCollision(labelB, labelA)
+        }
+      }
+    })
   }
 
   /**
@@ -228,7 +245,7 @@ export class PlayerController {
   }
 
   // 플레이어가 총알을 발사할 때 호출
-  shootBullet(client: Client, data: any, playerBullets: MapSchema<any>) {
+  shootBullet(client: Client, data: any) {
     const player = this.players.get(client.sessionId)
     if (!player) return
     const body = this.world.bodies.find((b) => b.label === 'player_' + client.sessionId)
@@ -262,6 +279,19 @@ export class PlayerController {
     bullet.power = power
     bullet.velocity = velocity
     bullet.owner_id = client.sessionId
-    playerBullets.set(bulletId, bullet)
+    this.bullets.set(bulletId, bullet)
+  }
+
+  private handleBulletCollision(bulletId: string, npcOrPlayerId: string) {
+    let bullet = this.bullets.get(bulletId)
+    if (!bullet) return
+    if (bullet.owner_id === npcOrPlayerId) return
+
+    if (npcOrPlayerId.startsWith('npc_')) {
+      this.npcController.removeNpc(npcOrPlayerId)
+    }
+
+    this.bullets.delete(bulletId)
+    Matter.World.remove(this.world, this.world.bodies.find((b) => b.label === bulletId))
   }
 }

@@ -44,7 +44,7 @@ export class NpcFollowerManager extends NpcBaseController {
     statePlayers?: MapSchema<Player>,
     bullets?: MapSchema<Bullet>
   ) {
-    super(world, npcs, statePlayers as MapSchema<Player>)
+    super(world, npcs)
     this.leaderId = leaderId
     if (statePlayers) this.statePlayers = statePlayers
 

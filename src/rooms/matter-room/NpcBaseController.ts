@@ -3,17 +3,16 @@ import { MapSchema } from '@colyseus/schema';
 import { Npc, Player } from '../schema/MatterRoomState';
 import { SCREEN_WIDTH, SCREEN_HEIGHT } from './physics';
 import { clamp, matterToDefold } from './NpcPhysicsUtils';
+import { MatterRoom } from './MatterRoom';
 
 export class NpcBaseController {
   protected world: Matter.World;
   protected npcs: MapSchema<Npc>;
-  protected statePlayers: MapSchema<Player>;
   protected MARGIN = 40;
 
-  constructor(world: Matter.World, npcs: MapSchema<Npc>, statePlayers: MapSchema<Player>) {
+  constructor(world: Matter.World, npcs: MapSchema<Npc>) {
     this.world = world;
     this.npcs = npcs;
-    this.statePlayers = statePlayers;
   }
 
   /**
@@ -68,5 +67,32 @@ export class NpcBaseController {
     npc.y = defoldPos.y;
     npc.dirx = dx / (distance || 1);
     npc.diry = dy / (distance || 1);
+  }
+
+  // NPC 제거 메서드
+  public removeNpc(npcId: string) {
+    // npcId가 npc_로 시작하는지 확인
+    if (!npcId.startsWith('npc_')) {
+      return;
+    }
+
+    // 물리 엔진에서 바디 제거
+    const npcBody = this.world.bodies.find((body) => body.label === npcId);
+    if (npcBody) {
+      // NPC 상태에서 제거
+      this.npcs.delete(npcId);
+      // 1초 후에 제거
+      setTimeout(() => {
+        // 바디의 모든 속성 제거
+        Matter.Body.setStatic(npcBody, true);
+        Matter.Body.setVelocity(npcBody, { x: 0, y: 0 });
+        Matter.Body.setAngularVelocity(npcBody, 0);
+        Matter.Body.setPosition(npcBody, { x: 0, y: 0 });
+        
+        // 월드에서 제거
+        Matter.World.remove(this.world, npcBody);
+
+      }, 2000);
+    }
   }
 } 
