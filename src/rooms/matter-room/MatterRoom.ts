@@ -34,26 +34,11 @@ export class MatterRoom extends Room<State> {
 
     // NPC 매니저 초기화
     this.npcWanderManager = new NpcWanderManager(
-      this.world,
+      this.engine,
       this.state.npcs,
       this.state.npcBullets,
       this.state.players
     )
-
-    // // NPC 및 팔로워 생성 (1초 간격 5회)
-    // let spawnCount = 0
-    // const spawnInterval = setInterval(() => {
-    //   this.npcWanderManager.spawnNpcs(
-    //     1,
-    //     25,
-    //     Math.floor(Math.random() * 8) + 4,
-    //     10
-    //   )
-    //   spawnCount++
-    //   if (spawnCount >= 5) {
-    //     clearInterval(spawnInterval)
-    //   }
-    // }, 1000)
 
     this.playerController = new PlayerController(this.engine, this.state.players, this.state.playerBullets, this.npcWanderManager)
 
@@ -61,7 +46,7 @@ export class MatterRoom extends Room<State> {
     this.setSimulationInterval((deltaTime) => {
       Matter.Engine.update(this.engine, deltaTime)
       if (this.playerController) {
-        this.playerController.updateAndCleanupBullets(this.state.playerBullets)
+        this.playerController.updateAndCleanupBullets()
       }
       if (this.npcWanderManager) {
         this.npcWanderManager.moveAllNpcs(deltaTime)
@@ -209,14 +194,14 @@ export class MatterRoom extends Room<State> {
     this.state.players.delete(client.sessionId)
     console.log(`플레이어 ${client.sessionId} 상태에서 제거됨`)
 
-    // // 플레이어가 소유한 총알들 제거
-    // const playerBullets = Array.from(this.state.playerBullets.entries()).filter(
-    //   ([_, bullet]) => bullet.owner_id === client.sessionId
-    // )
+    // 플레이어가 소유한 총알들 제거
+    const playerBullets = Array.from(this.state.playerBullets.entries()).filter(
+      ([_, bullet]) => bullet.owner_id === client.sessionId
+    )
 
-    // for (const [bulletId, _] of playerBullets) {
-    //   this.removeBullet(bulletId)
-    // }
+    for (const [bulletId, _] of playerBullets) {
+      this.removeBullet(bulletId)
+    }
 
     // 모든 플레이어가 나가면 지연 삭제 스케줄링
     if (this.state.players.size === 0) {

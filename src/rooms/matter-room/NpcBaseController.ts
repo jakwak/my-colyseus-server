@@ -6,12 +6,14 @@ import { clamp, matterToDefold } from './NpcPhysicsUtils';
 import { MatterRoom } from './MatterRoom';
 
 export class NpcBaseController {
+  protected engine: Matter.Engine;
   protected world: Matter.World;
   protected npcs: MapSchema<Npc>;
   protected MARGIN = 40;
 
-  constructor(world: Matter.World, npcs: MapSchema<Npc>) {
-    this.world = world;
+  constructor(engine: Matter.Engine, npcs: MapSchema<Npc>) {
+    this.engine = engine;
+    this.world = engine.world;
     this.npcs = npcs;
   }
 

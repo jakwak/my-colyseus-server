@@ -37,20 +37,20 @@ export class NpcFollowerManager extends NpcBaseController {
   private wanderManager: any = null
 
   constructor(
-    world: Matter.World,
+    engine: Matter.Engine,
     npcs: MapSchema<Npc>,
     leaderId: string,
     formationType: NpcFormationType = 'v',
     statePlayers?: MapSchema<Player>,
     bullets?: MapSchema<Bullet>
   ) {
-    super(world, npcs)
+    super(engine, npcs)
     this.leaderId = leaderId
     if (statePlayers) this.statePlayers = statePlayers
 
     // 매니저 클래스들 초기화
     this.formationManager = new NpcFormationManager(
-      world,
+      this.world,
       npcs,
       this.myNpcIds,
       new Map(), // followerRoles
@@ -62,7 +62,7 @@ export class NpcFollowerManager extends NpcBaseController {
     )
 
     this.movementManager = new NpcMovementManager(
-      world,
+      this.world,
       npcs,
       this.myNpcIds,
       this.npcDirs,
@@ -72,7 +72,7 @@ export class NpcFollowerManager extends NpcBaseController {
 
     // 리더 매니저 초기화 시 콜백 전달
     this.leaderManager = new NpcLeaderManager(
-      world,
+      this.world,
       npcs,
       this.myNpcIds,
       this.leaderId,
@@ -83,7 +83,7 @@ export class NpcFollowerManager extends NpcBaseController {
     // 전투 매니저 초기화
     if (bullets && statePlayers) {
       this.combatManager = new NpcCombatManager(
-        world,
+        this.engine,
         npcs,
         statePlayers,
         bullets

@@ -11,13 +11,6 @@ import {
   SCREEN_WIDTH,
 } from './physics'
 
-export interface RaycastHit {
-  playerId: string
-  player: Player
-  distance: number
-  hitPoint: { x: number; y: number }
-}
-
 export class NpcCombatManager {
   private world: Matter.World
   private npcs: MapSchema<Npc>
@@ -50,15 +43,36 @@ export class NpcCombatManager {
   > = new Map()
 
   constructor(
-    world: Matter.World,
+    engine: Matter.Engine,
     npcs: MapSchema<Npc>,
     players: MapSchema<Player>,
     bullets: MapSchema<Bullet>
   ) {
-    this.world = world
+    this.world = engine.world
     this.npcs = npcs
     this.players = players
     this.bullets = bullets
+
+    Matter.Events.on(engine, 'collisionStart', (event) => {
+      for (const pair of event.pairs) {
+        const labelA = pair.bodyA.label
+        const labelB = pair.bodyB.label
+        if (this.bullets.has(labelA)) {
+          this.handleBulletCollision(labelA, labelB)
+        } else if (this.bullets.has(labelB)) {
+          this.handleBulletCollision(labelB, labelA)
+        }
+      }
+    })
+  }
+
+  private handleBulletCollision(bulletId: string, npcOrPlayerId: string) {
+    let bullet = this.bullets.get(bulletId)
+    if (!bullet) return
+    if (bullet.owner_id === npcOrPlayerId) return
+
+    this.bullets.delete(bulletId)
+    Matter.World.remove(this.world, this.world.bodies.find((b) => b.label === bulletId))
   }
 
   // NPC의 실제 이동 방향 계산
@@ -147,7 +161,7 @@ export class NpcCombatManager {
 
         // 플레이어 바디인지 확인 (player_ 접두사 또는 sessionId)
         const isPlayerBody =
-          bodyLabel.startsWith('player_') || this.players.has(bodyLabel)
+          bodyLabel.startsWith('player_') || this.players.has(bodyLabel.replace('player_', ''))
         if (!isPlayerBody) continue
 
         // 플레이어 ID 추출

@@ -23,10 +23,10 @@ export class NpcWanderManager extends NpcBaseController {
   private bullets: MapSchema<Bullet>;
   private combatManager?: NpcCombatManager;
 
-  constructor(world: Matter.World, npcs: MapSchema<Npc>, bullets: MapSchema<Bullet>, players: MapSchema<Player>) {
-    super(world, npcs);
+  constructor(engine: Matter.Engine, npcs: MapSchema<Npc>, bullets: MapSchema<Bullet>, players: MapSchema<Player>) {
+    super(engine, npcs);
     this.bullets = bullets;
-    this.combatManager = new NpcCombatManager(world, npcs, players, bullets);
+    this.combatManager = new NpcCombatManager(engine, npcs, players, bullets);
     this.statePlayers = players;
   }
   // 임의의 NPC ID 반환
@@ -82,7 +82,7 @@ export class NpcWanderManager extends NpcBaseController {
       
       if (followerCount && followerSize) {
         const followerManager = new NpcFollowerManager(
-          this.world,
+          this.engine,
           this.npcs,
           leader_id,
           'v',

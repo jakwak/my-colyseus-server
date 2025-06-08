@@ -219,8 +219,8 @@ export class PlayerController {
   }
 
   // 플레이어가 쏜 총알만 동기화 및 화면 밖 삭제
-  syncAndCleanupPlayerBullets(playerBullets: MapSchema<any>) {
-    for (const [id, bullet] of playerBullets.entries()) {
+  syncAndCleanupPlayerBullets() {
+    for (const [id, bullet] of this.bullets.entries()) {
       const body = this.world.bodies.find((b) => b.label === id)
       if (body) {
         const defoldPos = matterToDefold(body.position)
@@ -232,16 +232,16 @@ export class PlayerController {
         ) {
           // Matter.js 바디와 state에서 삭제
           try { Matter.World.remove(this.world, body) } catch {}
-          playerBullets.delete(id)
+          this.bullets.delete(id)
         }
       }
     }
   }
 
   // update() + 총알 정리까지 한 번에 처리
-  updateAndCleanupBullets(playerBullets: MapSchema<any>) {
+  updateAndCleanupBullets() {
     this.update()
-    this.syncAndCleanupPlayerBullets(playerBullets)
+    this.syncAndCleanupPlayerBullets()
   }
 
   // 플레이어가 총알을 발사할 때 호출
