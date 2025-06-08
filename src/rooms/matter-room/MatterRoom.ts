@@ -42,38 +42,30 @@ export class MatterRoom extends Room<State> {
 
     this.playerController = new PlayerController(this.engine, this.state.players, this.state.playerBullets, this.npcWanderManager)
 
+    // this.engine.timing.timeScale = 1
+
     // 물리 업데이트 루프
     this.setSimulationInterval((deltaTime) => {
       Matter.Engine.update(this.engine, deltaTime)
-      if (this.playerController) {
-        this.playerController.updateAndCleanupBullets()
-      }
-      if (this.npcWanderManager) {
-        this.npcWanderManager.moveAllNpcs(deltaTime)
+        this.playerController?.updateAndCleanupBullets()
+        this.npcWanderManager?.moveAllNpcs(deltaTime)
         for (const fm of this.npcWanderManager.followerManagers) {
           const combatManager = fm.getCombatManager && fm.getCombatManager()
-          if (combatManager) {
-            combatManager.syncAndCleanupNpcBullets(this.state.npcBullets)
-          }
+            combatManager?.syncAndCleanupNpcBullets(this.state.npcBullets)
         }
-      }
     }, 1000 / 60)
 
   }
 
   onCreate() {
     this.onMessage('move', (client, data) => {
-      if (this.playerController) {
-        this.playerController.handleMove(client, data)
-      }
+        this.playerController?.handleMove(client, data)
     })
     this.onMessage('position_sync', this.handlePositionSync.bind(this))
     this.onMessage('toggle_debug', this.handleToggleDebug.bind(this))
     this.onMessage('get_debug_bodies', this.handleGetDebugBodies.bind(this))
     this.onMessage('shoot_bullet', (client, data) => {
-      if (this.playerController) {
-        this.playerController.shootBullet(client,data)
-      }
+      this.playerController?.shootBullet(client,data)
     })
 
     this.onMessage('spawn_npc', (client, data) => {
