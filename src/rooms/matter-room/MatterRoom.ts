@@ -126,7 +126,7 @@ export class MatterRoom extends Room<State> {
 
   onJoin(
     client: Client,
-    options?: { x?: number; y?: number; username?: string }
+    options?: { x?: number; y?: number; username?: string; type?: string }
   ) {
     // 클라이언트에서 전달한 시작 위치 사용 (없으면 디폴트)
     const startPos =
@@ -146,6 +146,8 @@ export class MatterRoom extends Room<State> {
     player.y = defoldPos.y
     player.color = color
     player.username = username
+    player.type = options?.type || 'model1'
+    console.log("player.type: ", player.type)
 
     console.log(
       `플레이어 ${client.sessionId} 생성됨 - 위치: (${player.x}, ${player.y}), 색상: ${player.color}, 이름: ${player.username}`

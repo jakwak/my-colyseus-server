@@ -7,6 +7,7 @@ export class Player extends Schema {
   @type("number") diry: number = 0;  
   @type("string") color: string = ""; // 밝은 톤의 랜덤색상 (겹치지 않게 할당)
   @type("string") username: string = "무명인"; // 기본값
+  @type("string") type: string = "model1";
 }
 
 export class Npc extends Schema {
