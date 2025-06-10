@@ -71,10 +71,16 @@ export class NpcCombatManager {
     if (!bullet) return
     if (bullet.owner_id === npcOrPlayerId) return
 
+    // 플레이어 바디와 충돌했을 경우 체력 감소
+    const player = this.players.get(npcOrPlayerId.replace('player_', ''))
+    if (player && player.health > 0) {
+      player.health -= bullet.power
+      console.log("player.health: ", player.health)
+    }
+
     this.bullets.delete(bulletId)
     Matter.World.remove(this.world, this.world.bodies.find((b) => b.label === bulletId))
   }
-
   // NPC의 실제 이동 방향 계산
   private getNpcMovementDirection(
     npcId: string
@@ -440,7 +446,7 @@ export class NpcCombatManager {
     bullet.y = startY
     bullet.dirx = dirX
     bullet.diry = dirY
-    bullet.power = 10
+    bullet.power = 5
     bullet.velocity = this.bulletSpeed
     bullet.owner_id = npcId
 

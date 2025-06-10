@@ -9,6 +9,7 @@ export class Player extends Schema {
   @type("string") username: string = "무명인"; // 기본값
   @type("string") type: string = "model1";
   @type("number") point: number = 0;
+  @type("number") health: number = 100;
 }
 
 export class Npc extends Schema {
@@ -23,6 +24,7 @@ export class Npc extends Schema {
   @type("string") color: string = "#FFFFFF";
   @type("number") dirx: number = 0;
   @type("number") diry: number = 0;
+  @type("number") health: number = 100;
 }
 
 export class Bullet extends Schema {
