@@ -8,6 +8,7 @@ export class Player extends Schema {
   @type("string") color: string = ""; // 밝은 톤의 랜덤색상 (겹치지 않게 할당)
   @type("string") username: string = "무명인"; // 기본값
   @type("string") type: string = "model1";
+  @type("number") point: number = 0;
 }
 
 export class Npc extends Schema {
@@ -39,7 +40,6 @@ export class Bullet extends Schema {
 export class State extends Schema {
   @type({ map: Player }) players = new MapSchema<Player>();
   @type({ map: Npc }) npcs = new MapSchema<Npc>();
-  // @type({ map: Bullet }) bullets = new MapSchema<Bullet>(); // 기존 bullets는 주석처리
   @type({ map: Bullet }) playerBullets = new MapSchema<Bullet>();
   @type({ map: Bullet }) npcBullets = new MapSchema<Bullet>();
 
