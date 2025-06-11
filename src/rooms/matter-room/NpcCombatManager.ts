@@ -73,9 +73,23 @@ export class NpcCombatManager {
 
     // 플레이어 바디와 충돌했을 경우 체력 감소
     const player = this.players.get(npcOrPlayerId.replace('player_', ''))
-    if (player && player.health > 0) {
-      player.health -= bullet.power
-      console.log("player.health: ", player.health)
+    if (player && player.hp > 0) {
+      player.hp -= bullet.power
+      // if (player.hp <= 0) {
+      //   this.players.delete(npcOrPlayerId.replace('player_', ''))
+      //   const playerBody = this.world.bodies.find((b) => b.label === npcOrPlayerId)
+      //   if (playerBody) {
+      //     setTimeout(() => {
+      //       // 바디의 모든 속성 제거
+      //       Matter.Body.setStatic(playerBody, true);
+      //       Matter.Body.setVelocity(playerBody, { x: 0, y: 0 });
+      //       Matter.Body.setAngularVelocity(playerBody, 0);
+      //       Matter.Body.setPosition(playerBody, { x: 0, y: 0 });
+      //       // 월드에서 제거
+      //       Matter.World.remove(this.world, playerBody);
+      //     }, 2000);
+      //   }
+      // }
     }
 
     this.bullets.delete(bulletId)
