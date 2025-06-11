@@ -7,7 +7,7 @@ export class Player extends Schema {
   @type("number") diry: number = 0;  
   @type("string") color: string = ""; // 밝은 톤의 랜덤색상 (겹치지 않게 할당)
   @type("string") username: string = "무명인"; // 기본값
-  @type("string") type: string = "model1";
+  @type("string") type: string = "model1"; // 비행기 모델
   @type("number") point: number = 0;
   @type("number") hp: number = 100;
 }
@@ -15,7 +15,7 @@ export class Player extends Schema {
 export class Npc extends Schema {
   @type("string") owner_id: string = "";
   @type("string") id: string = "";  
-  @type("string") type: string = ""; 
+  @type("string") type: string = "";  // 리더 또는 팔로워
   @type("number") x: number = 0;
   @type("number") y: number = 0;
   @type("number") size: number = 1;
