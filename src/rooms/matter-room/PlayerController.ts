@@ -288,7 +288,13 @@ export class PlayerController {
     if (bullet.owner_id === npcOrPlayerId) return
 
     if (npcOrPlayerId.startsWith('npc_')) {
-      this.npcController.removeNpc(npcOrPlayerId)
+      const npc = this.npcController.getNpc(npcOrPlayerId)
+      if (npc) {
+        npc.hp -= bullet.power
+        if (npc.hp <= 0) {
+          this.npcController.removeNpc(npcOrPlayerId)
+        }
+      }
     }
 
     this.bullets.delete(bulletId)

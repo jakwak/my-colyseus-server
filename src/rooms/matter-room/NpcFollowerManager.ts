@@ -177,6 +177,7 @@ export class NpcFollowerManager extends NpcBaseController {
     npc.type = 'follower'
     npc.x = clampedX
     npc.y = clampedY
+    npc.hp = 50
     npc.owner_id = 'server'
     npc.size = size
     this.npcs.set(id, npc)

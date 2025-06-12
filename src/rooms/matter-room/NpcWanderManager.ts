@@ -72,6 +72,7 @@ export class NpcWanderManager extends NpcBaseController {
       npc.y = y;
       npc.size = size;
       npc.shape = 'circle';
+      npc.hp = 100;
       npc.owner_id = 'server';
       npc.power = 10;
       npc.color = '#FFB300'; // 임의 색상

@@ -97,4 +97,8 @@ export class NpcBaseController {
       }, 2000);
     }
   }
+
+  public getNpc(npcId: string): Npc | undefined {
+    return this.npcs.get(npcId);
+  }
 } 
