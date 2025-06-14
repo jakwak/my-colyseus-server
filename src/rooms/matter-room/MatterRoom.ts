@@ -3,7 +3,6 @@ import { Player, State } from '../schema/MatterRoomState'
 import {
   createEngineAndWorld,
   addWalls,
-  createPlayer,
   moveBody,
   matterToDefold,
   defoldToMatter,
@@ -128,32 +127,7 @@ export class MatterRoom extends Room<State> {
     client: Client,
     options?: { x?: number; y?: number; username?: string; type?: string }
   ) {
-    // 클라이언트에서 전달한 시작 위치 사용 (없으면 디폴트)
-    const startPos =
-      options && options.x !== undefined && options.y !== undefined
-        ? { x: options.x, y: options.y }
-        : undefined
-
-    // State의 메서드로 색상 할당
-    const color = this.state.getRandomAvailableColor()
-    // username 할당
-    const username = options && options.username ? options.username : '무명인'
-
-    const body = createPlayer(this.world, client.sessionId, startPos)
-    const player = new Player()
-    const defoldPos = matterToDefold(body.position)
-    player.x = defoldPos.x
-    player.y = defoldPos.y
-    player.color = color
-    player.username = username
-    player.type = options?.type || 'model1'
-    console.log("player.type: ", player.type)
-
-    console.log(
-      `플레이어 ${client.sessionId} 생성됨 - 위치: (${player.x}, ${player.y}), 색상: ${player.color}, 이름: ${player.username}`
-    )
-
-    this.state.players.set(client.sessionId, player)
+    this.playerController.createPlayer(client, options)
   }
 
   onLeave(client: Client) {
@@ -165,37 +139,7 @@ export class MatterRoom extends Room<State> {
 
     console.log(`플레이어 ${client.sessionId} 퇴장 시작`)
 
-    // State의 메서드로 색상 반환
-    const player = this.state.players.get(client.sessionId)
-    if (player && player.color) {
-      this.state.returnColorToPool(player.color)
-    }
-
-    // 올바른 라벨로 플레이어 바디 찾기 및 제거
-    const body = this.world.bodies.find(
-      (b) => b.label === `player_${client.sessionId}`
-    )
-    if (body) {
-      try {
-        Matter.World.remove(this.world, body)
-        console.log(`플레이어 ${client.sessionId} 물리 바디 제거됨`)
-      } catch (error) {
-        console.error(`플레이어 ${client.sessionId} 바디 제거 중 오류:`, error)
-      }
-    }
-
-    // 플레이어 상태에서 제거
-    this.state.players.delete(client.sessionId)
-    console.log(`플레이어 ${client.sessionId} 상태에서 제거됨`)
-
-    // 플레이어가 소유한 총알들 제거
-    const playerBullets = Array.from(this.state.playerBullets.entries()).filter(
-      ([_, bullet]) => bullet.owner_id === client.sessionId
-    )
-
-    for (const [bulletId, _] of playerBullets) {
-      this.removeBullet(bulletId)
-    }
+    this.playerController.removePlayerFromGame(client.sessionId)
 
     // 모든 플레이어가 나가면 지연 삭제 스케줄링
     if (this.state.players.size === 0) {

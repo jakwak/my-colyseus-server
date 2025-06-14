@@ -45,38 +45,4 @@ export class State extends Schema {
   @type({ map: Bullet }) playerBullets = new MapSchema<Bullet>();
   @type({ map: Bullet }) npcBullets = new MapSchema<Bullet>();
 
-  // 밝은 톤의 색상 목록 (중복 방지)
-  availableColors: string[] = [
-    "#FFB300", // Vivid Yellow
-    "#FF7043", // Orange
-    "#FF8A65", // Light Orange
-    "#FFD54F", // Light Yellow
-    "#81C784", // Light Green
-    "#4FC3F7", // Light Blue
-    "#64B5F6", // Blue
-    "#BA68C8", // Purple
-    "#F06292", // Pink
-    "#A1887F", // Brown
-    "#90A4AE", // Gray Blue
-    "#AED581", // Lime Green
-    "#FFFFFF"  // White
-  ];
-
-  // 색상 랜덤 할당 (중복 방지)
-  getRandomAvailableColor(): string {
-    if (this.availableColors.length === 0) {
-      return "#FFB300";
-    }
-    const idx = Math.floor(Math.random() * this.availableColors.length);
-    const color = this.availableColors[idx];
-    this.availableColors.splice(idx, 1);
-    return color;
-  }
-
-  // 색상 반환
-  returnColorToPool(color: string) {
-    if (color && !this.availableColors.includes(color)) {
-      this.availableColors.push(color);
-    }
-  }
 } 

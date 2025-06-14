@@ -55,12 +55,41 @@ export function createNpcBody(world: Matter.World, id: string, x: number, y: num
   return body;
 }
 
-export function createPlayer(world: Matter.World, id: string, startPos?: { x: number; y: number }) {
-  // 디폴트 위치: 화면 가운데 위쪽
-  const defoldPos = startPos || {
-    x: SCREEN_WIDTH / 2,  // 화면 가운데 (480)
-    y: SCREEN_HEIGHT * 0.75  // 화면 위쪽 (160)
-  };
+export function createPlayerBody(world: Matter.World, id: string) {
+  // 플레이어 수에 따라 시작 위치 결정
+  const playerCount = world.bodies.filter(body => body.label.startsWith('player_')).length;
+  
+  // 4의 배수 간격으로 위치 계산
+  const position = playerCount % 4;
+  let defoldPos;
+  
+  switch(position) {
+    case 0: // 아래쪽
+      defoldPos = {
+        x: SCREEN_WIDTH / 2,
+        y: SCREEN_HEIGHT * 0.1
+      };
+      break;
+    case 1: // 위쪽
+      defoldPos = {
+        x: SCREEN_WIDTH / 2,
+        y: SCREEN_HEIGHT * 0.9
+      };
+      break;
+    case 2: // 왼쪽
+      defoldPos = {
+        x: SCREEN_WIDTH * 0.1,
+        y: SCREEN_HEIGHT / 2
+      };
+      break;
+    case 3: // 오른쪽
+      defoldPos = {
+        x: SCREEN_WIDTH * 0.9,
+        y: SCREEN_HEIGHT / 2
+      };
+      break;
+  }
+  
   const matterPos = defoldToMatter(defoldPos);
   
   const body = Matter.Bodies.circle(
