@@ -367,12 +367,21 @@ export class PlayerController {
     if (!bullet) return
     if (bullet.owner_id === npcOrPlayerId) return
 
+    const player = this.players.get(bullet.owner_id)
+
     if (npcOrPlayerId.startsWith('npc_')) {
       const npc = this.npcController.getNpc(npcOrPlayerId)
       if (npc) {
-        npc.hp -= bullet.power
+        npc.hp -= npc.type === 'leader' ? bullet.power * 0.5 : bullet.power
         if (npc.hp <= 0) {
           this.npcController.removeNpc(npcOrPlayerId)
+          if (player) {
+            player.point += 50
+          }
+        } else {
+          if (player) {
+            player.point += 10
+          }
         }
       }
     }
