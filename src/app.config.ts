@@ -20,6 +20,12 @@ export default config({
     },
 
     initializeExpress: (app) => {
+        app.use(require("cors")({
+            origin: "*", // 실제 운영에서는 정확한 origin으로 제한 필요
+            methods: ["GET", "POST", "OPTIONS"],
+            allowedHeaders: ["Content-Type"]
+        }));
+
         /**
          * Bind your custom express routes here:
          * Read more: https://expressjs.com/en/starter/basic-routing.html
