@@ -69,7 +69,7 @@ export class MatterRoom extends Room<State> {
 
     this.onMessage('spawn_npc', (client, data) => {
       if (this.npcWanderManager && this.state.npcs.size === 0) {
-        this.npcWanderManager.spawnNpcs(1, 25, Math.floor(Math.random() * 8) + 4, 10)
+        this.npcWanderManager.spawnNpcs(3, 25, Math.floor(Math.random() * 8) + 4, 10)
       }
     })
   }
