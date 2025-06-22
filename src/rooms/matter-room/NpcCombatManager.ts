@@ -71,30 +71,21 @@ export class NpcCombatManager {
     if (!bullet) return
     if (bullet.owner_id === npcOrPlayerId) return
 
+    this.bullets.delete(bulletId)
+    Matter.World.remove(this.world, this.world.bodies.find((b) => b.label === bulletId))
+    
     // 플레이어 바디와 충돌했을 경우 체력 감소
     const player = this.players.get(npcOrPlayerId.replace('player_', ''))
     if (player && player.hp > 0) {
       player.hp -= bullet.power
-      // if (player.hp <= 0) {
-      //   this.players.delete(npcOrPlayerId.replace('player_', ''))
-      //   const playerBody = this.world.bodies.find((b) => b.label === npcOrPlayerId)
-      //   if (playerBody) {
-      //     setTimeout(() => {
-      //       // 바디의 모든 속성 제거
-      //       Matter.Body.setStatic(playerBody, true);
-      //       Matter.Body.setVelocity(playerBody, { x: 0, y: 0 });
-      //       Matter.Body.setAngularVelocity(playerBody, 0);
-      //       Matter.Body.setPosition(playerBody, { x: 0, y: 0 });
-      //       // 월드에서 제거
-      //       Matter.World.remove(this.world, playerBody);
-      //     }, 2000);
-      //   }
-      // }
+      if (player.hp <= 0) {
+        player.score = Math.max(player.score, player.point)
+        player.point = 0
+        player.hp = 100
+      }
     }
-
-    this.bullets.delete(bulletId)
-    Matter.World.remove(this.world, this.world.bodies.find((b) => b.label === bulletId))
   }
+
   // NPC의 실제 이동 방향 계산
   private getNpcMovementDirection(
     npcId: string

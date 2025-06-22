@@ -39,37 +39,46 @@ export class MatterRoom extends Room<State> {
       this.state.players
     )
 
-    this.playerController = new PlayerController(this.engine, this.state.players, this.state.playerBullets, this.npcWanderManager)
+    this.playerController = new PlayerController(
+      this.engine,
+      this.state.players,
+      this.state.playerBullets,
+      this.npcWanderManager
+    )
 
     // this.engine.timing.timeScale = 1
 
     // 물리 업데이트 루프
     this.setSimulationInterval((deltaTime) => {
       Matter.Engine.update(this.engine, deltaTime)
-        this.playerController?.updateAndCleanupBullets()
-        this.npcWanderManager?.moveAllNpcs(deltaTime)
-        for (const fm of this.npcWanderManager.followerManagers) {
-          const combatManager = fm.getCombatManager && fm.getCombatManager()
-            combatManager?.syncAndCleanupNpcBullets(this.state.npcBullets)
-        }
+      this.playerController?.updateAndCleanupBullets()
+      this.npcWanderManager?.moveAllNpcs(deltaTime)
+      for (const fm of this.npcWanderManager.followerManagers) {
+        const combatManager = fm.getCombatManager && fm.getCombatManager()
+        combatManager?.syncAndCleanupNpcBullets(this.state.npcBullets)
+      }
     }, 1000 / 60)
-
   }
 
   onCreate() {
     this.onMessage('move', (client, data) => {
-        this.playerController?.handleMove(client, data)
+      this.playerController?.handleMove(client, data)
     })
     this.onMessage('position_sync', this.handlePositionSync.bind(this))
     this.onMessage('toggle_debug', this.handleToggleDebug.bind(this))
     this.onMessage('get_debug_bodies', this.handleGetDebugBodies.bind(this))
     this.onMessage('shoot_bullet', (client, data) => {
-      this.playerController?.shootBullet(client,data)
+      this.playerController?.shootBullet(client, data)
     })
 
     this.onMessage('spawn_npc', (client, data) => {
       if (this.npcWanderManager && this.state.npcs.size === 0) {
-        this.npcWanderManager.spawnNpcs(3, 25, Math.floor(Math.random() * 8) + 4, 10)
+        this.npcWanderManager.spawnNpcs(
+          3,
+          25,
+          Math.floor(Math.random() * 8) + 4,
+          10
+        )
       }
     })
   }
@@ -143,7 +152,7 @@ export class MatterRoom extends Room<State> {
 
     // 모든 플레이어가 나가면 지연 삭제 스케줄링
     if (this.state.players.size === 0) {
-      this.scheduleRoomCleanup()
+      // this.scheduleRoomCleanup()
     }
   }
 
@@ -204,19 +213,16 @@ export class MatterRoom extends Room<State> {
         this.npcWanderManager = null
       }
 
-      // 모든 총알 제거
-      const allPlayerBullets = Array.from(this.state.playerBullets.keys())
-      for (const bulletId of allPlayerBullets) {
+      // 모든 총알 제거 - 직접 순회
+      for (const bulletId of this.state.playerBullets.keys()) {
         this.removeBullet(bulletId)
       }
-      const allNpcBullets = Array.from(this.state.npcBullets.keys())
-      for (const bulletId of allNpcBullets) {
+      for (const bulletId of this.state.npcBullets.keys()) {
         this.removeBullet(bulletId)
       }
 
-      // 모든 NPC 제거
-      const allNpcs = Array.from(this.state.npcs.keys())
-      for (const npcId of allNpcs) {
+      // 모든 NPC 제거 - 직접 순회
+      for (const npcId of this.state.npcs.keys()) {
         this.removeNpc(npcId)
       }
 

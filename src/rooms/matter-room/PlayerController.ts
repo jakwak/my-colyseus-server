@@ -37,19 +37,19 @@ export class PlayerController {
 
   // 클래스 상단에 색상 배열 추가
   private availableColors: string[] = [
-    '#FFB300', // Vivid Yellow
-    '#FF7043', // Orange
-    '#FF8A65', // Light Orange
-    '#FFD54F', // Light Yellow
-    '#81C784', // Light Green
-    '#4FC3F7', // Light Blue
-    '#64B5F6', // Blue
-    '#BA68C8', // Purple
-    '#F06292', // Pink
-    '#A1887F', // Brown
-    '#90A4AE', // Gray Blue
-    '#AED581', // Lime Green
-    '#FFFFFF', // White
+    '#B7950B', // 매우 어두운 주황
+    '#A04000', // 매우 진한 주황
+    '#D68910', // 매우 어두운 노랑
+    '#C0392B', // 매우 어두운 빨강
+    '#0E6655', // 매우 어두운 청록
+    '#1F618D', // 매우 어두운 파랑
+    '#1E8449', // 매우 어두운 초록
+    '#D4AC0D', // 매우 어두운 골드
+    '#6C3483', // 매우 어두운 보라
+    '#138D75', // 매우 어두운 민트
+    '#5B2C6F', // 매우 진한 보라
+    '#1B4F72', // 매우 어두운 하늘색
+    '#922B21', // 매우 진한 빨강
   ]
 
   constructor(
@@ -131,7 +131,7 @@ export class PlayerController {
       this.targetAngles.set(client.sessionId, angle)
       this.autoMoveTargets.delete(client.sessionId)
       // 수동 입력일 때 setVelocity로 바로 이동
-      const speed = 10
+      const speed = data.speed || 10
       Matter.Body.setVelocity(body, {
         x: data.x * speed,
         y: -data.y * speed,
@@ -336,7 +336,7 @@ export class PlayerController {
     const radius = 5
     const bulletBody = Matter.Bodies.circle(x, SCREEN_HEIGHT - y, radius, {
       label: bulletId,
-      isSensor: true,
+      // isSensor: true,
       frictionAir: 0,
       collisionFilter: {
         category: CATEGORY_BULLET,
@@ -409,14 +409,11 @@ export class PlayerController {
 
   // 플레이어의 모든 총알 제거
   removePlayerBullets(sessionId: string) {
-    // 플레이어가 소유한 총알들 찾기
-    const playerBullets = Array.from(this.bullets.entries()).filter(
-      ([_, bullet]) => bullet.owner_id === sessionId
-    )
-
-    // 찾은 총알들 제거
-    for (const [bulletId, _] of playerBullets) {
-      this.removeBullet(bulletId)
+    // 플레이어가 소유한 총알들을 직접 순회하며 제거
+    for (const [bulletId, bullet] of this.bullets.entries()) {
+      if (bullet.owner_id === sessionId) {
+        this.removeBullet(bulletId)
+      }
     }
   }
 

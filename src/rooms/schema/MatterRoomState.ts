@@ -9,6 +9,7 @@ export class Player extends Schema {
   @type("string") username: string = "무명인"; // 기본값
   @type("string") type: string = "model1"; // 비행기 모델
   @type("number") point: number = 0;
+  @type("number") score: number = 0;
   @type("number") hp: number = 100;
 }
 
