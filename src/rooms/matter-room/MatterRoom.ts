@@ -12,6 +12,7 @@ import {
 import Matter from 'matter-js'
 import { NpcWanderManager } from './NpcWanderManager'
 import { PlayerController } from './PlayerController'
+import { StarManager } from './StarManager'
 
 export class MatterRoom extends Room<State> {
   // 디버그 모드 (true면 물리 바디 정보 전송)
@@ -21,6 +22,7 @@ export class MatterRoom extends Room<State> {
   private npcWanderManager: NpcWanderManager | null = null
   private isDisposing: boolean = false // 방 정리 중인지 체크
   private playerController: PlayerController | null = null
+  private starManager: StarManager | null = null
 
   constructor() {
     super()
@@ -38,12 +40,19 @@ export class MatterRoom extends Room<State> {
       this.state.npcBullets,
       this.state.players
     )
+    this.npcWanderManager.matterRoom = this // MatterRoom 참조 설정
 
     this.playerController = new PlayerController(
       this.engine,
       this.state.players,
       this.state.playerBullets,
       this.npcWanderManager
+    )
+
+    this.starManager = new StarManager(
+      this.engine,
+      this.state.stars,
+      this.state.players
     )
 
     // this.engine.timing.timeScale = 1
@@ -53,6 +62,7 @@ export class MatterRoom extends Room<State> {
       Matter.Engine.update(this.engine, deltaTime)
       this.playerController?.updateAndCleanupBullets()
       this.npcWanderManager?.moveAllNpcs(deltaTime)
+      this.starManager?.cleanupOldStars() // 오래된 Star 정리
       for (const fm of this.npcWanderManager.followerManagers) {
         const combatManager = fm.getCombatManager && fm.getCombatManager()
         combatManager?.syncAndCleanupNpcBullets(this.state.npcBullets)
@@ -180,8 +190,10 @@ export class MatterRoom extends Room<State> {
       return
     }
 
-    // NPC 컨트롤러를 통해 제거
-    this.npcWanderManager?.removeNpc(npcId)
+    // NPC 컨트롤러를 통해 제거 (올바른 메서드 사용)
+    if (this.npcWanderManager) {
+      this.npcWanderManager.removeNpcWithCleanup(npcId)
+    }
   }
 
   // 방 정리를 지연시키는 메서드 (새로 추가)
@@ -240,6 +252,22 @@ export class MatterRoom extends Room<State> {
 
   // 방이 완전히 종료될 때 타이머 정리 (새로 추가)
   onDispose() {
-    console.log('방이 완전히 종료됩니다.')
+    this.isDisposing = true
+    console.log('방 정리 시작...')
+    
+    // 모든 Star 정리
+    this.starManager?.cleanupAllStars()
+    
+    // 기존 정리 로직
+    if (this.state.players.size === 0 && !this.isDisposing) {
+      console.log('방이 완전히 종료됩니다.')
+    }
+  }
+
+  // NPC가 죽을 때 Star 생성
+  public createStarAtNpcDeath(npcId: string, x: number, y: number, ownerId: string) {
+    if (this.starManager) {
+      this.starManager.createStar(x, y, ownerId)
+    }
   }
 }

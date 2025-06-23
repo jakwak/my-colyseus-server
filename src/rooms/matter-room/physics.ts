@@ -15,6 +15,7 @@ export const CATEGORY_PLAYER = 0x0001;
 export const CATEGORY_WALL   = 0x0002;
 export const CATEGORY_BULLET = 0x0004;
 export const CATEGORY_NPC    = 0x0008;
+export const CATEGORY_STAR   = 0x0010;
 
 // 화면 크기 설정
 export const WALL_THICKNESS = 20;
@@ -106,7 +107,7 @@ export function createPlayerBody(world: Matter.World, id: string) {
       slop: 0,  // 미세한 관통 허용치 (0으로 설정하여 정확한 충돌 처리)
       collisionFilter: {
         category: CATEGORY_PLAYER,
-        mask: CATEGORY_WALL | CATEGORY_BULLET | CATEGORY_NPC // 플레이어는 벽, 총알, NPC와만 충돌
+        mask: CATEGORY_WALL | CATEGORY_BULLET | CATEGORY_NPC | CATEGORY_STAR // 플레이어는 벽, 총알, NPC, Star와만 충돌
       }
     }
   );

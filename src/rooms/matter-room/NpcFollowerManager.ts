@@ -8,6 +8,7 @@ import { NpcCombatManager } from './NpcCombatManager'
 import { NpcFormationManager } from './NpcFormationManager'
 import { NpcMovementManager } from './NpcMovementManager'
 import { NpcLeaderManager } from './NpcLeaderManager'
+import { getRandomTargetNear } from './NpcTargetUtils'
 
 const MARGIN = 40
 
@@ -191,8 +192,11 @@ export class NpcFollowerManager extends NpcBaseController {
     const leaderBody = this.world.bodies.find((b) => b.label === this.leaderId)
 
     if (!leader || !leaderBody) {
-      // 리더가 없을 때 새 리더 선출 처리
-      this.leaderManager.handleLeaderlessState(deltaTime)
+      // 리더가 없을 때 팔로워들을 wandering NPC로 변환
+      console.log(`[FOLLOWER] 리더 ${this.leaderId} 없음, 팔로워들을 wandering NPC로 변환`)
+      
+      // 팔로워 매니저 정리 (내부에서 팔로워들을 wandering NPC로 변환)
+      this.cleanup()
       return
     }
 
@@ -334,11 +338,72 @@ export class NpcFollowerManager extends NpcBaseController {
     console.log(`[FOLLOWER] 리더 변경: ${oldLeaderId} -> ${newLeaderId}`)
   }
 
+  // 팔로워 NPC 제거 메서드
+  public removeFollowerNpc(npcId: string) {
+    // npcId가 npc_로 시작하는지 확인
+    if (!npcId.startsWith('npc_')) {
+      return;
+    }
+
+    // 물리 엔진에서 바디 제거
+    const npcBody = this.world.bodies.find((body) => body.label === npcId);
+    if (npcBody) {
+      try {
+        // 월드에서 바디 즉시 제거
+        Matter.World.remove(this.world, npcBody);
+        console.log(`[FOLLOWER] 팔로워 바디 제거 완료: ${npcId}`)
+      } catch (error) {
+        console.warn(`[FOLLOWER] 팔로워 바디 제거 실패: ${npcId}`, error)
+      }
+    }
+
+    // NPC 상태에서 제거
+    this.npcs.delete(npcId);
+    console.log(`[FOLLOWER] 팔로워 상태 제거 완료: ${npcId}`)
+    
+    // 내부 데이터 정리
+    this.myNpcIds.delete(npcId)
+    this.npcDirs.delete(npcId)
+  }
+
   // 타이머 정리 메서드
   public cleanup() {
     if (this.formationChangeTimer) {
       clearInterval(this.formationChangeTimer)
       this.formationChangeTimer = null
     }
+    
+    // 모든 팔로워를 wandering NPC로 변환
+    const followerIds = Array.from(this.myNpcIds)
+    for (const followerId of followerIds) {
+      const follower = this.npcs.get(followerId)
+      if (follower) {
+        follower.type = 'wanderer'
+        follower.color = '#FF6B6B'
+        
+        // WanderManager에 등록
+        if (this.wanderManager) {
+          this.wanderManager.myNpcIds.add(followerId)
+          this.wanderManager.npcDirs.set(followerId, { x: 1, y: 0 })
+          
+          const followerBody = this.world.bodies.find((b) => b.label === followerId)
+          if (followerBody) {
+            const target = getRandomTargetNear(followerBody.position.x, followerBody.position.y, 1500, { x: 1, y: 0 })
+            this.wanderManager.npcTargets.set(followerId, target)
+          }
+        }
+      }
+    }
+    
+    // 내부 데이터 정리
+    this.myNpcIds.clear()
+    this.npcDirs.clear()
+    this.temporaryTargetActive = false
+    this.returningToFormation = false
+    this.temporaryTargetActivatedAt = null
+    this.temporaryTargetPlayerId = null
+    this.combatEnabled = false
+    
+    console.log(`[FOLLOWER] 팔로워 매니저 정리 완료: ${this.leaderId}`)
   }
 }

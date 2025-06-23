@@ -81,21 +81,18 @@ export class NpcBaseController {
     // 물리 엔진에서 바디 제거
     const npcBody = this.world.bodies.find((body) => body.label === npcId);
     if (npcBody) {
-      // NPC 상태에서 제거
-      this.npcs.delete(npcId);
-      // 1초 후에 제거
-      setTimeout(() => {
-        // 바디의 모든 속성 제거
-        Matter.Body.setStatic(npcBody, true);
-        Matter.Body.setVelocity(npcBody, { x: 0, y: 0 });
-        Matter.Body.setAngularVelocity(npcBody, 0);
-        Matter.Body.setPosition(npcBody, { x: 0, y: 0 });
-        
-        // 월드에서 제거
+      try {
+        // 월드에서 바디 즉시 제거
         Matter.World.remove(this.world, npcBody);
-
-      }, 2000);
+        console.log(`[NPC] 바디 제거 완료: ${npcId}`)
+      } catch (error) {
+        console.warn(`[NPC] 바디 제거 실패: ${npcId}`, error)
+      }
     }
+
+    // NPC 상태에서 제거
+    this.npcs.delete(npcId);
+    console.log(`[NPC] NPC 제거 완료: ${npcId}`)
   }
 
   public getNpc(npcId: string): Npc | undefined {

@@ -12,6 +12,7 @@ import {
   createPlayerBody,
 } from './physics'
 import { NpcBaseController } from './NpcBaseController'
+import { NpcWanderManager } from './NpcWanderManager'
 
 /**
  * 플레이어 컨트롤러 (비행기 선회 이동)
@@ -336,7 +337,7 @@ export class PlayerController {
     const radius = 5
     const bulletBody = Matter.Bodies.circle(x, SCREEN_HEIGHT - y, radius, {
       label: bulletId,
-      // isSensor: true,
+      isSensor: true,
       frictionAir: 0,
       collisionFilter: {
         category: CATEGORY_BULLET,
@@ -374,7 +375,26 @@ export class PlayerController {
       if (npc) {
         npc.hp -= npc.type === 'leader' ? bullet.power * 0.5 : bullet.power
         if (npc.hp <= 0) {
-          this.npcController.removeNpc(npcOrPlayerId)
+          // NPC가 죽을 때 Star 생성
+          const npcBody = this.world.bodies.find((b) => b.label === npcOrPlayerId)
+          if (npcBody) {
+            const defoldPos = matterToDefold(npcBody.position)
+            // MatterRoom의 createStarAtNpcDeath 메서드 호출
+            if (this.npcController instanceof NpcWanderManager) {
+              const matterRoom = (this.npcController as any).matterRoom
+              if (matterRoom && matterRoom.createStarAtNpcDeath) {
+                matterRoom.createStarAtNpcDeath(npcOrPlayerId, defoldPos.x, defoldPos.y, bullet.owner_id)
+              }
+            }
+          }
+          
+          // NPC 완전 정리 (바디 포함)
+          if (this.npcController instanceof NpcWanderManager) {
+            this.npcController.removeNpcWithCleanup(npcOrPlayerId)
+          } else {
+            this.npcController.removeNpc(npcOrPlayerId)
+          }
+          
           if (player) {
             player.point += 50
           }

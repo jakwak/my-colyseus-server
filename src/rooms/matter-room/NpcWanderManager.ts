@@ -22,6 +22,7 @@ export class NpcWanderManager extends NpcBaseController {
   private statePlayers: MapSchema<Player>;
   private bullets: MapSchema<Bullet>;
   private combatManager?: NpcCombatManager;
+  public matterRoom?: any; // MatterRoom 참조
 
   constructor(engine: Matter.Engine, npcs: MapSchema<Npc>, bullets: MapSchema<Bullet>, players: MapSchema<Player>) {
     super(engine, npcs);
@@ -194,5 +195,54 @@ export class NpcWanderManager extends NpcBaseController {
       }
       fm.moveAllFollowers(deltaTime);
     }
+  }
+
+  // NPC 제거 시 관련 데이터 정리
+  public removeNpcWithCleanup(npcId: string) {
+    // npcId가 npc_로 시작하는지 확인
+    if (!npcId.startsWith('npc_')) {
+      return;
+    }
+
+    // 물리 엔진에서 바디 제거
+    const npcBody = this.world.bodies.find((body) => body.label === npcId);
+    if (npcBody) {
+      try {
+        // 월드에서 바디 즉시 제거
+        Matter.World.remove(this.world, npcBody);
+        console.log(`[WANDER] 바디 제거 완료: ${npcId}`)
+      } catch (error) {
+        console.warn(`[WANDER] 바디 제거 실패: ${npcId}`, error)
+      }
+    }
+
+    // NPC 상태에서 제거
+    this.npcs.delete(npcId);
+    console.log(`[WANDER] NPC 상태 제거 완료: ${npcId}`)
+    
+    // 내부 데이터 정리
+    this.myNpcIds.delete(npcId)
+    this.npcTargets.delete(npcId)
+    this.npcDirs.delete(npcId)
+    
+    // 팔로워 매니저에서도 정리
+    for (let i = this.followerManagers.length - 1; i >= 0; i--) {
+      const fm = this.followerManagers[i]
+      if (fm.leaderId === npcId) {
+        // 리더가 죽었으므로 팔로워들을 wandering NPC로 변환
+        console.log(`[WANDER] 리더 ${npcId} 죽음, 팔로워들을 wandering NPC로 변환`)
+        
+        // 팔로워 매니저 정리 (내부에서 팔로워들을 wandering NPC로 변환)
+        fm.cleanup()
+        this.followerManagers.splice(i, 1)
+        console.log(`[WANDER] 팔로워 매니저 정리 완료: ${npcId}`)
+      } else {
+        // 팔로워가 죽었으므로 해당 팔로워만 정리
+        fm.removeFollowerNpc(npcId)
+      }
+    }
+    
+    console.log(`[WANDER] NPC 완전 정리 완료: ${npcId}`)
+    console.log(`[WANDER] 현재 월드 바디 수: ${this.world.bodies.length}`)
   }
 }

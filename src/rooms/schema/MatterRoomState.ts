@@ -40,10 +40,19 @@ export class Bullet extends Schema {
   @type("string") owner_id: string = ""; // 누가 쐈는지
 }
 
+export class Star extends Schema {
+  @type("string") id: string = "";
+  @type("number") x: number = 0;
+  @type("number") y: number = 0;
+  @type("number") heal_amount: number = 5; // 회복량
+  @type("string") owner_id: string = ""; // 누가 생성했는지 (점수 계산용)
+  @type("number") created_at: number = 0; // 생성 시간 (자동 삭제용)
+}
+
 export class State extends Schema {
   @type({ map: Player }) players = new MapSchema<Player>();
   @type({ map: Npc }) npcs = new MapSchema<Npc>();
   @type({ map: Bullet }) playerBullets = new MapSchema<Bullet>();
   @type({ map: Bullet }) npcBullets = new MapSchema<Bullet>();
-
+  @type({ map: Star }) stars = new MapSchema<Star>();
 } 
