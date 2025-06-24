@@ -96,22 +96,33 @@ export class PlayerController {
 
   // 플레이어 생성 메서드 추가
   createPlayer(client: Client, options?: { username?: string; type?: string }) {
-    const body = createPlayerBody(this.world, client.sessionId)
-    const player = new Player()
-    const defoldPos = matterToDefold(body.position)
+    try {
+      const body = createPlayerBody(this.world, client.sessionId)
+      if (!body) {
+        console.error(`플레이어 ${client.sessionId} 바디 생성 실패`)
+        return
+      }
+      
+      const player = new Player()
+      const defoldPos = matterToDefold(body.position)
 
-    player.x = defoldPos.x
-    player.y = defoldPos.y
-    player.color = this.getRandomAvailableColor()
-    player.username = options?.username || '무명인'
-    player.type = options?.type || 'model1'
+      player.x = defoldPos.x
+      player.y = defoldPos.y
+      player.color = this.getRandomAvailableColor()
+      player.username = options?.username || '무명인'
+      player.type = options?.type || 'model1'
 
-    console.log(
-      `플레이어 ${client.sessionId} 생성됨 - 위치: (${player.x}, ${player.y}), 색상: ${player.color}, 이름: ${player.username}`
-    )
+      console.log(
+        `플레이어 ${client.sessionId} 생성됨 - 위치: (${player.x}, ${player.y}), 색상: ${player.color}, 이름: ${player.username}`
+      )
 
-    this.players.set(client.sessionId, player)
-    this.addPlayer(client.sessionId)
+      this.players.set(client.sessionId, player)
+      this.addPlayer(client.sessionId)
+    } catch (error) {
+      console.error(`플레이어 ${client.sessionId} 생성 중 오류:`, error)
+      // 클라이언트에게 오류 알림
+      client.send('player_creation_error', { message: '플레이어 생성에 실패했습니다.' })
+    }
   }
 
   /**

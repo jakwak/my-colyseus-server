@@ -16,7 +16,7 @@ import app from "./app.config";
 import { Encoder } from "@colyseus/schema";
 
 // 버퍼 크기를 128KB로 증가
-Encoder.BUFFER_SIZE = 1024 * 1024;
+// Encoder.BUFFER_SIZE = 1024 * 1024;
 
 // Create and listen on 2567 (or PORT environment variable.)
 listen(app);
