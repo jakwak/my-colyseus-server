@@ -40,7 +40,7 @@ export class MatterRoom extends Room<State> {
       this.state.npcBullets,
       this.state.players
     )
-    this.npcWanderManager.matterRoom = this // MatterRoom 참조 설정
+    this.npcWanderManager.matterRoom = this
 
     this.playerController = new PlayerController(
       this.engine,
@@ -59,38 +59,80 @@ export class MatterRoom extends Room<State> {
 
     // 물리 업데이트 루프
     this.setSimulationInterval((deltaTime) => {
-      Matter.Engine.update(this.engine, deltaTime)
-      this.playerController?.updateAndCleanupBullets()
-      this.npcWanderManager?.moveAllNpcs(deltaTime)
-      this.starManager?.cleanupOldStars() // 오래된 Star 정리
-      for (const fm of this.npcWanderManager.followerManagers) {
-        const combatManager = fm.getCombatManager && fm.getCombatManager()
-        combatManager?.syncAndCleanupNpcBullets(this.state.npcBullets)
+      try {
+        Matter.Engine.update(this.engine, deltaTime)
+        this.playerController?.updateAndCleanupBullets()
+        this.npcWanderManager?.moveAllNpcs(deltaTime)
+        this.starManager?.cleanupOldStars()
+        for (const fm of this.npcWanderManager.followerManagers) {
+          const combatManager = fm.getCombatManager && fm.getCombatManager()
+          combatManager?.syncAndCleanupNpcBullets(this.state.npcBullets)
+        }
+      } catch (error) {
+        console.error('물리 엔진 업데이트 에러:', error)
+        // 에러 발생 시 방을 안전하게 정리
+        this.safeDispose()
       }
     }, 1000 / 60)
-  }
 
-  onCreate() {
     this.onMessage('move', (client, data) => {
-      this.playerController?.handleMove(client, data)
+      try {
+        this.playerController?.handleMove(client, data)
+      } catch (error) {
+        console.error('move 메시지 처리 에러:', error);
+      }
     })
-    this.onMessage('position_sync', this.handlePositionSync.bind(this))
-    this.onMessage('toggle_debug', this.handleToggleDebug.bind(this))
-    this.onMessage('get_debug_bodies', this.handleGetDebugBodies.bind(this))
+    
+    this.onMessage('position_sync', (client, data) => {
+      try {
+        this.handlePositionSync(client, data)
+      } catch (error) {
+        console.error('position_sync 메시지 처리 에러:', error);
+      }
+    })
+    
+    this.onMessage('toggle_debug', (client, data) => {
+      try {
+        this.handleToggleDebug(client, data)
+      } catch (error) {
+        console.error('toggle_debug 메시지 처리 에러:', error);
+      }
+    })
+    
+    this.onMessage('get_debug_bodies', (client, data) => {
+      try {
+        this.handleGetDebugBodies(client, data)
+      } catch (error) {
+        console.error('get_debug_bodies 메시지 처리 에러:', error);
+      }
+    })
+    
     this.onMessage('shoot_bullet', (client, data) => {
-      this.playerController?.shootBullet(client, data)
+      try {
+        this.playerController?.shootBullet(client, data)
+      } catch (error) {
+        console.error('shoot_bullet 메시지 처리 에러:', error);
+      }
     })
 
     this.onMessage('spawn_npc', (client, data) => {
-      if (this.npcWanderManager && this.state.npcs.size === 0) {
-        this.npcWanderManager.spawnNpcs(
-          3,
-          25,
-          Math.floor(Math.random() * 8) + 4,
-          10
-        )
+      try {
+        if (this.npcWanderManager && this.state.npcs.size === 0) {
+          this.npcWanderManager.spawnNpcs(
+            3, // 초기 리더 수
+            25, // 리더 크기
+            Math.floor(Math.random() * 8) + 4, // 팔로워 4 ~ 11 명
+            10 // 팔로워 크기
+          )
+        }
+      } catch (error) {
+        console.error('spawn_npc 메시지 처리 에러:', error);
       }
     })
+  }
+
+  onCreate() {
+ 
   }
 
   private handlePositionSync(client: Client, data: any) {
@@ -268,6 +310,24 @@ export class MatterRoom extends Room<State> {
   public createStarAtNpcDeath(npcId: string, x: number, y: number, ownerId: string) {
     if (this.starManager) {
       this.starManager.createStar(x, y, ownerId)
+    }
+  }
+
+  // 안전한 방 정리 메서드 추가
+  private safeDispose() {
+    try {
+      console.log('에러로 인한 안전한 방 정리 시작')
+      this.cleanupRoom()
+    } catch (cleanupError) {
+      console.error('방 정리 중 추가 에러:', cleanupError)
+      // 강제로 방 연결 해제
+      this.clients.forEach(client => {
+        try {
+          client.leave()
+        } catch (e) {
+          console.error('클라이언트 강제 퇴장 실패:', e)
+        }
+      })
     }
   }
 }
