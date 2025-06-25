@@ -25,10 +25,25 @@ export class NpcWanderManager extends NpcBaseController {
   public matterRoom?: any; // MatterRoom 참조
 
   constructor(engine: Matter.Engine, npcs: MapSchema<Npc>, bullets: MapSchema<Bullet>, players: MapSchema<Player>) {
+    console.log('=== NpcWanderManager 생성자 진입 ===')
     super(engine, npcs);
-    this.bullets = bullets;
-    this.combatManager = new NpcCombatManager(engine, npcs, players, bullets);
-    this.statePlayers = players;
+    console.log('1. NpcWanderManager - 부모 클래스 초기화 완료')
+    
+    try {
+      this.bullets = bullets;
+      console.log('2. NpcWanderManager - bullets 설정 완료')
+      
+      this.combatManager = new NpcCombatManager(engine, npcs, players, bullets);
+      console.log('3. NpcWanderManager - combatManager 생성 완료')
+      
+      this.statePlayers = players;
+      console.log('4. NpcWanderManager - statePlayers 설정 완료')
+      
+      console.log('=== NpcWanderManager 생성자 완료 ===')
+    } catch (error) {
+      console.error('=== NpcWanderManager 생성자 에러 ===:', error)
+      throw error
+    }
   }
   // 임의의 NPC ID 반환
   public getRandomNpcId(): string | null {
@@ -103,7 +118,9 @@ export class NpcWanderManager extends NpcBaseController {
   }
   // 모든 NPC 이동
   public moveAllNpcs(deltaTime: number) {
+    console.log('moveAllNpcs 진입', this.myNpcIds)
     for (const id of this.myNpcIds) {
+      console.log('moveAllNpcs: npcId=', id)
       const npc = this.npcs.get(id);
       if (!npc) continue;
       const npcBody = this.world.bodies.find((b) => b.label === id);

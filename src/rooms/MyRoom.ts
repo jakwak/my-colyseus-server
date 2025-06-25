@@ -61,7 +61,7 @@ export class MyRoom extends Room {
       // 플레이어가 사용하던 색상을 다시 사용 가능하게 만듦
       this.returnColorToPool(player.color);
     }
-    this.state.players.delete(client.sessionId);
+    this.state.players.delete(client.sessionId as any);
     console.log(`Player ${player.name} left:`, client.sessionId);
   }
 

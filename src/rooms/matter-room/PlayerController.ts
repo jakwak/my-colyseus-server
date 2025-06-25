@@ -9,6 +9,7 @@ import {
   CATEGORY_BULLET,
   CATEGORY_WALL,
   CATEGORY_NPC,
+  CATEGORY_PLAYER,
   createPlayerBody,
 } from './physics'
 import { NpcBaseController } from './NpcBaseController'
@@ -35,46 +36,45 @@ export class PlayerController {
   private targetPositions: Map<string, { x: number; y: number }> = new Map()
   private bullets: MapSchema<Bullet>
   private npcController: NpcBaseController
-
-  // 클래스 상단에 색상 배열 추가
-  private availableColors: string[] = [
-    '#B7950B', // 매우 어두운 주황
-    '#A04000', // 매우 진한 주황
-    '#D68910', // 매우 어두운 노랑
-    '#C0392B', // 매우 어두운 빨강
-    '#0E6655', // 매우 어두운 청록
-    '#1F618D', // 매우 어두운 파랑
-    '#1E8449', // 매우 어두운 초록
-    '#D4AC0D', // 매우 어두운 골드
-    '#6C3483', // 매우 어두운 보라
-    '#138D75', // 매우 어두운 민트
-    '#5B2C6F', // 매우 진한 보라
-    '#1B4F72', // 매우 어두운 하늘색
-    '#922B21', // 매우 진한 빨강
-  ]
+  private npcWanderManager: NpcWanderManager
+  private availableColors: string[] = []
 
   constructor(
     engine: Matter.Engine,
     players: MapSchema<Player>,
     bullets: MapSchema<Bullet>,
-    npcController: NpcBaseController
+    npcWanderManager: NpcWanderManager
   ) {
-    this.world = engine.world
-    this.players = players
-    this.bullets = bullets
-    this.npcController = npcController
-
-    Matter.Events.on(engine, 'collisionStart', (event) => {
-      for (const pair of event.pairs) {
-        const labelA = pair.bodyA.label
-        const labelB = pair.bodyB.label
-        if (this.bullets.has(labelA)) {
-          this.handleBulletCollision(labelA, labelB)
-        } else if (this.bullets.has(labelB)) {
-          this.handleBulletCollision(labelB, labelA)
-        }
-      }
-    })
+    console.log('=== PlayerController 생성자 진입 ===')
+    try {
+      this.world = engine.world
+      this.players = players
+      this.bullets = bullets
+      this.npcWanderManager = npcWanderManager
+      
+      console.log('1. PlayerController - 색상 풀 초기화')
+      this.availableColors = [
+        '#B7950B', // 매우 어두운 주황
+        '#A04000', // 매우 진한 주황
+        '#8B4513', // 갈색
+        '#654321', // 매우 어두운 갈색
+        '#2F4F4F', // 다크 슬레이트 그레이
+        '#696969', // 딤 그레이
+        '#708090', // 슬레이트 그레이
+        '#778899', // 라이트 슬레이트 그레이
+        '#4682B4', // 스틸 블루
+        '#5F9EA0', // 카드뮴 블루
+        '#20B2AA', // 라이트 시 그린
+        '#008B8B', // 다크 시 그린
+        '#006400', // 다크 그린
+      ]
+      console.log('2. PlayerController - 색상 풀 초기화 완료')
+      
+      console.log('=== PlayerController 생성자 완료 ===')
+    } catch (error) {
+      console.error('=== PlayerController 생성자 에러 ===:', error)
+      throw error
+    }
   }
 
   // 색상 관련 메서드들 추가
@@ -95,33 +95,46 @@ export class PlayerController {
   }
 
   // 플레이어 생성 메서드 추가
-  createPlayer(client: Client, options?: { username?: string; type?: string }) {
-    try {
-      const body = createPlayerBody(this.world, client.sessionId)
-      if (!body) {
-        console.error(`플레이어 ${client.sessionId} 바디 생성 실패`)
-        return
+  async createPlayer(client: Client, options?: { username?: string; type?: string }) {
+    const maxRetries = 3
+    let retryCount = 0
+    
+    while (retryCount < maxRetries) {
+      try {
+        const body = createPlayerBody(this.world, client.sessionId)
+        if (!body) {
+          console.error(`플레이어 ${client.sessionId} 바디 생성 실패 (시도 ${retryCount + 1})`)
+          retryCount++
+          continue
+        }
+        
+        const player = new Player()
+        const defoldPos = matterToDefold(body.position)
+
+        player.x = defoldPos.x
+        player.y = defoldPos.y
+        player.color = this.getRandomAvailableColor()
+        player.username = options?.username || '무명인'
+        player.type = options?.type || 'model1'
+
+        console.log(`플레이어 ${client.sessionId} 생성됨`)
+        this.players.set(client.sessionId, player)
+        this.addPlayer(client.sessionId)
+        return // 성공 시 종료
+        
+      } catch (error) {
+        console.error(`플레이어 ${client.sessionId} 생성 중 오류 (시도 ${retryCount + 1}):`, error)
+        retryCount++
+        
+        if (retryCount >= maxRetries) {
+          console.error(`플레이어 ${client.sessionId} 생성 최종 실패`)
+          client.send('player_creation_error', { message: '플레이어 생성에 실패했습니다.' })
+          return
+        }
+        
+        // 잠시 대기 후 재시도
+        await new Promise(resolve => setTimeout(resolve, 100))
       }
-      
-      const player = new Player()
-      const defoldPos = matterToDefold(body.position)
-
-      player.x = defoldPos.x
-      player.y = defoldPos.y
-      player.color = this.getRandomAvailableColor()
-      player.username = options?.username || '무명인'
-      player.type = options?.type || 'model1'
-
-      console.log(
-        `플레이어 ${client.sessionId} 생성됨 - 위치: (${player.x}, ${player.y}), 색상: ${player.color}, 이름: ${player.username}`
-      )
-
-      this.players.set(client.sessionId, player)
-      this.addPlayer(client.sessionId)
-    } catch (error) {
-      console.error(`플레이어 ${client.sessionId} 생성 중 오류:`, error)
-      // 클라이언트에게 오류 알림
-      client.send('player_creation_error', { message: '플레이어 생성에 실패했습니다.' })
     }
   }
 
@@ -320,7 +333,7 @@ export class PlayerController {
           try {
             Matter.World.remove(this.world, body)
           } catch {}
-          this.bullets.delete(id)
+          this.bullets.delete(id as any)
         }
       }
     }
@@ -352,7 +365,7 @@ export class PlayerController {
       frictionAir: 0,
       collisionFilter: {
         category: CATEGORY_BULLET,
-        mask: CATEGORY_WALL | CATEGORY_NPC,
+        mask: CATEGORY_WALL | CATEGORY_NPC | CATEGORY_PLAYER, // 플레이어와도 충돌
       },
     })
     Matter.Body.setVelocity(bulletBody, {
@@ -372,70 +385,6 @@ export class PlayerController {
     bullet.velocity = velocity
     bullet.owner_id = client.sessionId
     this.bullets.set(bulletId, bullet)
-  }
-
-  private handleBulletCollision(bulletId: string, npcOrPlayerId: string) {
-    let bullet = this.bullets.get(bulletId)
-    if (!bullet) return
-    if (bullet.owner_id === npcOrPlayerId) return
-
-    const player = this.players.get(bullet.owner_id)
-
-    if (npcOrPlayerId.startsWith('npc_')) {
-      const npc = this.npcController.getNpc(npcOrPlayerId)
-      if (npc) {
-        npc.hp -= npc.type === 'leader' ? bullet.power * 0.5 : bullet.power
-        if (npc.hp <= 0) {
-          // NPC가 죽을 때 Star 생성
-          const npcBody = this.world.bodies.find((b) => b.label === npcOrPlayerId)
-          if (npcBody) {
-            const defoldPos = matterToDefold(npcBody.position)
-            // MatterRoom의 createStarAtNpcDeath 메서드 호출
-            if (this.npcController instanceof NpcWanderManager) {
-              const matterRoom = (this.npcController as any).matterRoom
-              if (matterRoom && matterRoom.createStarAtNpcDeath) {
-                matterRoom.createStarAtNpcDeath(npcOrPlayerId, defoldPos.x, defoldPos.y, bullet.owner_id)
-              }
-            }
-          }
-          
-          // NPC 완전 정리 (바디 포함)
-          if (this.npcController instanceof NpcWanderManager) {
-            this.npcController.removeNpcWithCleanup(npcOrPlayerId)
-          } else {
-            this.npcController.removeNpc(npcOrPlayerId)
-          }
-          
-          if (player) {
-            player.point += 50
-          }
-        } else {
-          if (player) {
-            player.point += 10
-          }
-        }
-      }
-    }
-
-    this.bullets.delete(bulletId)
-    Matter.World.remove(
-      this.world,
-      this.world.bodies.find((b) => b.label === bulletId)
-    )
-  }
-  // 총알 제거 메서드
-  private removeBullet(bulletId: string) {
-    // Matter.js 바디에서 제거
-    const body = this.world.bodies.find((b) => b.label === bulletId)
-    if (body) {
-      try {
-        Matter.World.remove(this.world, body)
-      } catch (error) {
-        console.error(`총알 ${bulletId} 바디 제거 중 오류:`, error)
-      }
-    }
-    // State에서 제거
-    this.bullets.delete(bulletId)
   }
 
   // 플레이어의 모든 총알 제거
@@ -473,10 +422,25 @@ export class PlayerController {
     }
 
     // 플레이어 상태에서 제거
-    this.players.delete(sessionId)
+    this.players.delete(sessionId as any)
     console.log(`플레이어 ${sessionId} 상태에서 제거됨`)
 
     // 기존 removePlayer 메서드 호출 (각도, 타이머 등 정리)
     this.removePlayer(sessionId)
+  }
+
+  // 총알 제거 메서드
+  private removeBullet(bulletId: string) {
+    // Matter.js 바디에서 제거
+    const body = this.world.bodies.find((b) => b.label === bulletId)
+    if (body) {
+      try {
+        Matter.World.remove(this.world, body)
+      } catch (error) {
+        console.error(`총알 ${bulletId} 바디 제거 중 오류:`, error)
+      }
+    }
+    // State에서 제거
+    this.bullets.delete(bulletId as any)
   }
 }

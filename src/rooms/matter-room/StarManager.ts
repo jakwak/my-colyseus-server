@@ -5,34 +5,21 @@ import { SCREEN_WIDTH, SCREEN_HEIGHT, CATEGORY_STAR, CATEGORY_PLAYER } from './p
 
 export class StarManager {
   private world: Matter.World
-  private stars: MapSchema<Star>
-  private players: MapSchema<Player>
   private starLifetime: number = 30000 // 30초 후 자동 삭제
   private starRadius: number = 15 // Star 충돌 반경
 
   constructor(
-    engine: Matter.Engine,
-    stars: MapSchema<Star>,
-    players: MapSchema<Player>
+    private engine: Matter.Engine,
+    private stars: MapSchema<Star>,
+    private players: MapSchema<Player>
   ) {
+    console.log('=== StarManager 생성자 진입 ===')
     this.world = engine.world
-    this.stars = stars
-    this.players = players
-
-    // 충돌 이벤트 리스너 설정 (engine에 등록)
-    Matter.Events.on(engine, 'collisionStart', (event: any) => {
-      for (const pair of event.pairs) {
-        const labelA = pair.bodyA.label
-        const labelB = pair.bodyB.label
-        
-        // Star와 플레이어 충돌 감지
-        if (labelA.startsWith('star_') && labelB.startsWith('player_')) {
-          this.handleStarPlayerCollision(labelA, labelB.replace('player_', ''))
-        } else if (labelB.startsWith('star_') && labelA.startsWith('player_')) {
-          this.handleStarPlayerCollision(labelB, labelA.replace('player_', ''))
-        }
-      }
-    })
+    console.log('1. StarManager - world 설정 완료')
+    this.starLifetime = 30000 // 30초
+    console.log('2. StarManager - starLifetime 설정 완료')
+    
+    console.log('=== StarManager 생성자 완료 ===')
   }
 
   // NPC가 죽을 때 Star 생성
@@ -106,7 +93,7 @@ export class StarManager {
     }
 
     // State에서 제거
-    this.stars.delete(starId)
+    this.stars.delete(starId as any)
     console.log(`[STAR] Star 제거: ${starId}`)
   }
 
@@ -117,12 +104,12 @@ export class StarManager {
 
     for (const [starId, star] of this.stars.entries()) {
       if (currentTime - star.created_at > this.starLifetime) {
-        starsToRemove.push(starId)
+        starsToRemove.push(starId as string)
       }
     }
 
     starsToRemove.forEach(starId => {
-      this.removeStar(starId)
+      this.removeStar(starId as string)
     })
 
     if (starsToRemove.length > 0) {
@@ -134,7 +121,7 @@ export class StarManager {
   public cleanupAllStars() {
     const starIds = Array.from(this.stars.keys())
     starIds.forEach(starId => {
-      this.removeStar(starId)
+      this.removeStar(starId as string)
     })
     console.log(`[STAR] 모든 Star 정리됨 (${starIds.length}개)`)
   }

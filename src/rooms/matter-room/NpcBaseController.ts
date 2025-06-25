@@ -91,7 +91,7 @@ export class NpcBaseController {
     }
 
     // NPC 상태에서 제거
-    this.npcs.delete(npcId);
+    this.npcs.delete(npcId as any);
     console.log(`[NPC] NPC 제거 완료: ${npcId}`)
   }
 

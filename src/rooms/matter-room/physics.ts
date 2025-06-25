@@ -49,7 +49,7 @@ export function createNpcBody(world: Matter.World, id: string, x: number, y: num
     frictionAir: 0.01,
     collisionFilter: {
       category: CATEGORY_NPC,
-      mask: CATEGORY_WALL | CATEGORY_BULLET // NPC는 플레이어, 벽, 총알과만 충돌
+      mask: CATEGORY_WALL | CATEGORY_BULLET | CATEGORY_PLAYER // NPC는 벽, 총알, 플레이어와 충돌
     }
   });
   Matter.World.add(world, body);
@@ -57,8 +57,8 @@ export function createNpcBody(world: Matter.World, id: string, x: number, y: num
 }
 
 export function createPlayerBody(world: Matter.World, id: string) {
-  // 플레이어 수에 따라 시작 위치 결정
   const playerCount = world.bodies.filter(body => body.label.startsWith('player_')).length;
+  // 여러 플레이어가 동시에 접속하면 같은 위치에 생성될 수 있음
   
   // 4의 배수 간격으로 위치 계산
   const position = playerCount % 4;

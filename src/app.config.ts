@@ -22,6 +22,7 @@ export default config({
       require('cors')({
         origin: process.env.ALLOWED_ORIGINS?.split(',') || [
           'http://localhost:3000',
+          'http://localhost:4173',
           'http://localhost:5173',
         ],
         methods: ['GET', 'POST', 'OPTIONS'],
@@ -78,10 +79,9 @@ export default config({
     // 메모리 사용량 모니터링
     setInterval(() => {
         const memUsage = process.memoryUsage();
-        console.log(`메모리 사용량: ${Math.round(memUsage.heapUsed / 1024 / 1024)}MB`);
-        
-        if (memUsage.heapUsed > 500 * 1024 * 1024) {
-            console.warn('메모리 사용량이 높습니다!');
+        if (memUsage.heapUsed > 100 * 1024 * 1024) { // 100MB 이상 사용 시 경고
+          console.log(`메모리 사용량: ${Math.round(memUsage.heapUsed / 1024 / 1024)}MB`);
+          console.warn('메모리 사용량이 높습니다! 메모리 사용량을 줄이세요!');
         }
     }, 10000);
   },

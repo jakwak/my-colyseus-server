@@ -52,38 +52,6 @@ export class NpcCombatManager {
     this.npcs = npcs
     this.players = players
     this.bullets = bullets
-
-    Matter.Events.on(engine, 'collisionStart', (event) => {
-      for (const pair of event.pairs) {
-        const labelA = pair.bodyA.label
-        const labelB = pair.bodyB.label
-        if (this.bullets.has(labelA)) {
-          this.handleBulletCollision(labelA, labelB)
-        } else if (this.bullets.has(labelB)) {
-          this.handleBulletCollision(labelB, labelA)
-        }
-      }
-    })
-  }
-
-  private handleBulletCollision(bulletId: string, npcOrPlayerId: string) {
-    let bullet = this.bullets.get(bulletId)
-    if (!bullet) return
-    if (bullet.owner_id === npcOrPlayerId) return
-
-    this.bullets.delete(bulletId)
-    Matter.World.remove(this.world, this.world.bodies.find((b) => b.label === bulletId))
-    
-    // 플레이어 바디와 충돌했을 경우 체력 감소
-    const player = this.players.get(npcOrPlayerId.replace('player_', ''))
-    if (player && player.hp > 0) {
-      player.hp -= bullet.power
-      if (player.hp <= 0) {
-        player.score = Math.max(player.score, player.point)
-        player.point = 0
-        player.hp = 100
-      }
-    }
   }
 
   // NPC의 실제 이동 방향 계산
@@ -540,7 +508,7 @@ export class NpcCombatManager {
           try {
             Matter.World.remove(this.world, body)
           } catch {}
-          npcBullets.delete(id)
+          npcBullets.delete(id as any)
         }
       }
     }

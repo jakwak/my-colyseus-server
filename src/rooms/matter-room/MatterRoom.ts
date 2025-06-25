@@ -26,60 +26,120 @@ export class MatterRoom extends Room<State> {
 
   constructor() {
     super()
+    // 기본 초기화만 수행
     this.state = new State()
     const { engine, world } = createEngineAndWorld()
     this.engine = engine
     this.world = world
-
     addWalls(this.world)
+  }
 
-    // NPC 매니저 초기화
-    this.npcWanderManager = new NpcWanderManager(
-      this.engine,
-      this.state.npcs,
-      this.state.npcBullets,
-      this.state.players
-    )
-    this.npcWanderManager.matterRoom = this
+  onCreate() {
+    // 방이 생성될 때 한 번만 실행되는 초기화
+    console.log('=== MatterRoom 생성됨 - onCreate 진입 ===')
+    
+    try {
+      console.log('1. NPC 매니저 생성 직전')
+      // NPC 매니저 초기화
+      this.npcWanderManager = new NpcWanderManager(
+        this.engine,
+        this.state.npcs,
+        this.state.npcBullets,
+        this.state.players
+      )
+      console.log('2. NPC 매니저 생성 완료')
+      
+      this.npcWanderManager.matterRoom = this
+      console.log('3. NPC 매니저 matterRoom 설정 완료')
 
-    this.playerController = new PlayerController(
-      this.engine,
-      this.state.players,
-      this.state.playerBullets,
-      this.npcWanderManager
-    )
+      console.log('4. PlayerController 생성 직전')
+      this.playerController = new PlayerController(
+        this.engine,
+        this.state.players,
+        this.state.playerBullets,
+        this.npcWanderManager
+      )
+      console.log('5. PlayerController 생성 완료')
 
-    this.starManager = new StarManager(
-      this.engine,
-      this.state.stars,
-      this.state.players
-    )
+      console.log('6. StarManager 생성 직전')
+      this.starManager = new StarManager(
+        this.engine,
+        this.state.stars,
+        this.state.players
+      )
+      console.log('7. StarManager 생성 완료')
 
-    // this.engine.timing.timeScale = 1
-
-    // 물리 업데이트 루프
-    this.setSimulationInterval((deltaTime) => {
-      try {
-        Matter.Engine.update(this.engine, deltaTime)
-        this.playerController?.updateAndCleanupBullets()
-        this.npcWanderManager?.moveAllNpcs(deltaTime)
-        this.starManager?.cleanupOldStars()
-        for (const fm of this.npcWanderManager.followerManagers) {
-          const combatManager = fm.getCombatManager && fm.getCombatManager()
-          combatManager?.syncAndCleanupNpcBullets(this.state.npcBullets)
+      console.log('8. setSimulationInterval 등록 직전')
+      // 물리 업데이트 루프 시작
+      this.setSimulationInterval((deltaTime) => {
+        console.log('=== 시뮬레이션 루프 진입 ===')
+        
+        try {
+          console.log('8-1. Matter.Engine.update 시작')
+          Matter.Engine.update(this.engine, deltaTime)
+          console.log('8-2. Matter.Engine.update 완료')
+          
+          console.log('8-3. playerController.updateAndCleanupBullets 시작')
+          this.playerController?.updateAndCleanupBullets()
+          console.log('8-4. playerController.updateAndCleanupBullets 완료')
+          
+          console.log('8-5. npcWanderManager.moveAllNpcs 시작')
+          this.npcWanderManager?.moveAllNpcs(deltaTime)
+          console.log('8-6. npcWanderManager.moveAllNpcs 완료')
+          
+          console.log('8-7. starManager.cleanupOldStars 시작')
+          this.starManager?.cleanupOldStars()
+          console.log('8-8. starManager.cleanupOldStars 완료')
+          
+          console.log('8-9. followerManagers 루프 시작')
+          if (this.npcWanderManager?.followerManagers) {
+            for (const fm of this.npcWanderManager.followerManagers) {
+              const combatManager = fm.getCombatManager && fm.getCombatManager()
+              combatManager?.syncAndCleanupNpcBullets(this.state.npcBullets)
+            }
+          }
+          console.log('8-10. followerManagers 루프 완료')
+          
+          console.log('=== 시뮬레이션 루프 완료 ===')
+        } catch (error) {
+          console.error('=== 시뮬레이션 루프 에러 ===:', error)
+          // 에러 발생 시 방을 안전하게 정리
+          this.safeDispose()
         }
-      } catch (error) {
-        console.error('물리 엔진 업데이트 에러:', error)
-        // 에러 발생 시 방을 안전하게 정리
-        this.safeDispose()
-      }
-    }, 1000 / 60)
+      }, 1000 / 60)
+      console.log('9. setSimulationInterval 등록 완료')
 
+      console.log('10. setupMessageHandlers 호출 직전')
+      // 메시지 핸들러 등록
+      this.setupMessageHandlers()
+      console.log('11. setupMessageHandlers 호출 완료')
+      
+      console.log('12. 충돌 이벤트 리스너 등록')
+      // 통합된 충돌 이벤트 리스너 등록
+      Matter.Events.on(this.engine, 'collisionStart', (event) => {
+        this.handleCollision(event)
+      })
+      console.log('13. 충돌 이벤트 리스너 등록 완료')
+      
+      console.log('14. 초기 NPC 스폰 시작')
+      // 방 생성 시 자동으로 NPC 스폰 (플레이어가 없어도)
+      this.spawnInitialNpcs()
+      console.log('15. 초기 NPC 스폰 완료')
+      
+      console.log('=== MatterRoom onCreate 완료 ===')
+    } catch (error) {
+      console.error('=== MatterRoom onCreate 에러 ===:', error)
+      console.error('에러 스택:', (error as Error).stack)
+      throw error
+    }
+  }
+
+  private setupMessageHandlers() {
     this.onMessage('move', (client, data) => {
       try {
         this.playerController?.handleMove(client, data)
       } catch (error) {
-        console.error('move 메시지 처리 에러:', error);
+        console.error('move 메시지 처리 에러:', error)
       }
     })
     
@@ -87,7 +147,7 @@ export class MatterRoom extends Room<State> {
       try {
         this.handlePositionSync(client, data)
       } catch (error) {
-        console.error('position_sync 메시지 처리 에러:', error);
+        console.error('position_sync 메시지 처리 에러:', error)
       }
     })
     
@@ -95,7 +155,7 @@ export class MatterRoom extends Room<State> {
       try {
         this.handleToggleDebug(client, data)
       } catch (error) {
-        console.error('toggle_debug 메시지 처리 에러:', error);
+        console.error('toggle_debug 메시지 처리 에러:', error)
       }
     })
     
@@ -103,7 +163,7 @@ export class MatterRoom extends Room<State> {
       try {
         this.handleGetDebugBodies(client, data)
       } catch (error) {
-        console.error('get_debug_bodies 메시지 처리 에러:', error);
+        console.error('get_debug_bodies 메시지 처리 에러:', error)
       }
     })
     
@@ -111,7 +171,7 @@ export class MatterRoom extends Room<State> {
       try {
         this.playerController?.shootBullet(client, data)
       } catch (error) {
-        console.error('shoot_bullet 메시지 처리 에러:', error);
+        console.error('shoot_bullet 메시지 처리 에러:', error)
       }
     })
 
@@ -126,13 +186,18 @@ export class MatterRoom extends Room<State> {
           )
         }
       } catch (error) {
-        console.error('spawn_npc 메시지 처리 에러:', error);
+        console.error('spawn_npc 메시지 처리 에러:', error)
       }
     })
-  }
 
-  onCreate() {
- 
+    // if (this.npcWanderManager && this.state.npcs.size === 0) {
+    //   this.npcWanderManager.spawnNpcs(
+    //     3, // 초기 리더 수
+    //     25, // 리더 크기
+    //     Math.floor(Math.random() * 8) + 4, // 팔로워 4 ~ 11 명
+    //     10 // 팔로워 크기
+    //   )
+    // }
   }
 
   private handlePositionSync(client: Client, data: any) {
@@ -188,7 +253,7 @@ export class MatterRoom extends Room<State> {
     client: Client,
     options?: { x?: number; y?: number; username?: string; type?: string }
   ) {
-    this.playerController.createPlayer(client, options)
+    this.playerController?.createPlayer(client, options)
   }
 
   onLeave(client: Client) {
@@ -204,7 +269,7 @@ export class MatterRoom extends Room<State> {
 
     // 모든 플레이어가 나가면 지연 삭제 스케줄링
     if (this.state.players.size === 0) {
-      // this.scheduleRoomCleanup()
+      this.scheduleRoomCleanup()
     }
   }
 
@@ -219,10 +284,10 @@ export class MatterRoom extends Room<State> {
     }
     // MapSchema에서 존재할 때만 삭제
     if (this.state.playerBullets.has(bulletId)) {
-      this.state.playerBullets.delete(bulletId)
+      this.state.playerBullets.delete(bulletId as any)
     }
     if (this.state.npcBullets.has(bulletId)) {
-      this.state.npcBullets.delete(bulletId)
+      this.state.npcBullets.delete(bulletId as any)
     }
   }
 
@@ -329,5 +394,239 @@ export class MatterRoom extends Room<State> {
         }
       })
     }
+  }
+
+  // 초기 NPC 스폰 메서드
+  private spawnInitialNpcs() {
+    console.log('초기 NPC 스폰 시작 - 3개 NPC 생성')
+    try {
+      // 초기 NPC 3개 생성 (각각 1개씩, 크기 40)
+      this.npcWanderManager?.spawnNpcs(3, 25, 5, 15)
+      console.log('초기 NPC 스폰 완료')
+    } catch (error) {
+      console.error('초기 NPC 스폰 에러:', error)
+    }
+  }
+
+  // 통합된 충돌 처리 메서드
+  private handleCollision(event: any) {
+    for (const pair of event.pairs) {
+      const labelA = pair.bodyA.label
+      const labelB = pair.bodyB.label
+      
+      // 플레이어 총알과 NPC 충돌
+      if (labelA.startsWith('player_bullet_') && labelB.startsWith('npc_')) {
+        console.log('플레이어 총알과 NPC 충돌:', labelA, labelB)
+        // PlayerController의 handleBulletCollision 호출
+        if (this.playerController) {
+          // private 메서드이므로 직접 호출할 수 없으므로, 다른 방법 사용
+          this.handlePlayerBulletCollision(labelA, labelB)
+        }
+      } else if (labelB.startsWith('player_bullet_') && labelA.startsWith('npc_')) {
+        console.log('플레이어 총알과 NPC 충돌:', labelB, labelA)
+        if (this.playerController) {
+          this.handlePlayerBulletCollision(labelB, labelA)
+        }
+      }
+      
+      // 플레이어 총알과 다른 플레이어 충돌 (PvP)
+      if (labelA.startsWith('player_bullet_') && labelB.startsWith('player_')) {
+        console.log('플레이어 총알과 다른 플레이어 충돌:', labelA, labelB)
+        this.handlePlayerVsPlayerCollision(labelA, labelB.replace('player_', ''))
+      } else if (labelB.startsWith('player_bullet_') && labelA.startsWith('player_')) {
+        console.log('플레이어 총알과 다른 플레이어 충돌:', labelB, labelA)
+        this.handlePlayerVsPlayerCollision(labelB, labelA.replace('player_', ''))
+      }
+      
+      // NPC 미사일과 플레이어 충돌
+      if (labelA.startsWith('npc_missile_') && labelB.startsWith('player_')) {
+        console.log('NPC 미사일과 플레이어 충돌:', labelA, labelB)
+        this.handleNpcMissileCollision(labelA, labelB.replace('player_', ''))
+      } else if (labelB.startsWith('npc_missile_') && labelA.startsWith('player_')) {
+        console.log('NPC 미사일과 플레이어 충돌:', labelB, labelA)
+        this.handleNpcMissileCollision(labelB, labelA.replace('player_', ''))
+      }
+      
+      // NPC 총알과 플레이어 충돌
+      if (labelA.startsWith('npc_bullet_') && labelB.startsWith('player_')) {
+        console.log('NPC 총알과 플레이어 충돌:', labelA, labelB)
+        this.handleNpcBulletCollision(labelA, labelB.replace('player_', ''))
+      } else if (labelB.startsWith('npc_bullet_') && labelA.startsWith('player_')) {
+        console.log('NPC 총알과 플레이어 충돌:', labelB, labelA)
+        this.handleNpcBulletCollision(labelB, labelA.replace('player_', ''))
+      }
+      
+      // Star와 플레이어 충돌
+      if (labelA.startsWith('star_') && labelB.startsWith('player_')) {
+        console.log('Star와 플레이어 충돌:', labelA, labelB)
+        // StarManager의 handleStarPlayerCollision 호출
+        if (this.starManager) {
+          this.handleStarCollision(labelA, labelB.replace('player_', ''))
+        }
+      } else if (labelB.startsWith('star_') && labelA.startsWith('player_')) {
+        console.log('Star와 플레이어 충돌:', labelB, labelA)
+        if (this.starManager) {
+          this.handleStarCollision(labelB, labelA.replace('player_', ''))
+        }
+      }
+    }
+  }
+
+  // 플레이어 총알 충돌 처리
+  private handlePlayerBulletCollision(bulletId: string, npcId: string) {
+    const bullet = this.state.playerBullets.get(bulletId)
+    if (!bullet) return
+    
+    const player = this.state.players.get(bullet.owner_id)
+    const npc = this.state.npcs.get(npcId)
+    
+    if (!npc) return
+    
+    console.log(`플레이어 총알 ${bulletId}가 NPC ${npcId}에 맞음!`)
+    
+    // NPC 체력 감소
+    npc.hp -= npc.type === 'leader' ? bullet.power * 0.5 : bullet.power
+    
+    if (npc.hp <= 0) {
+      console.log(`NPC ${npcId} 사망!`)
+      // NPC가 죽을 때 Star 생성
+      const npcBody = this.world.bodies.find((b) => b.label === npcId)
+      if (npcBody) {
+        const defoldPos = matterToDefold(npcBody.position)
+        this.starManager?.createStar(defoldPos.x, defoldPos.y, bullet.owner_id)
+      }
+      
+      // NPC 제거
+      this.npcWanderManager?.removeNpc(npcId)
+      
+      // 플레이어 점수 추가
+      if (player) {
+        player.point += 50
+      }
+    } else {
+      // 플레이어 점수 추가 (데미지만)
+      if (player) {
+        player.point += 10
+      }
+    }
+    
+    // 총알 제거
+    this.removeBullet(bulletId)
+  }
+
+  // Star 충돌 처리
+  private handleStarCollision(starId: string, playerId: string) {
+    const star = this.state.stars.get(starId)
+    const player = this.state.players.get(playerId)
+    
+    if (!star || !player) return
+    
+    console.log(`플레이어 ${playerId}가 Star ${starId} 획득!`)
+    
+    // HP 회복
+    const oldHp = player.hp
+    player.hp = Math.min(100, player.hp + star.heal_amount)
+    const healedAmount = player.hp - oldHp
+    
+    console.log(`플레이어 ${playerId} HP 회복: ${oldHp} -> ${player.hp} (+${healedAmount})`)
+    
+    // Star 제거
+    this.starManager?.removeStar(starId)
+    
+    // 보너스 점수
+    if (star.owner_id && star.owner_id !== playerId) {
+      player.point += 10
+      console.log(`보너스 점수 +10 for player ${playerId}`)
+    }
+  }
+
+  // NPC 미사일 충돌 처리
+  private handleNpcMissileCollision(missileId: string, playerId: string) {
+    const missile = this.state.npcBullets.get(missileId)
+    const player = this.state.players.get(playerId)
+    
+    if (!missile || !player) return
+    
+    console.log(`플레이어 ${playerId}가 NPC 미사일 ${missileId}에 맞음!`)
+    
+    // 플레이어 체력 감소 (미사일은 더 강함)
+    const oldHp = player.hp
+    player.hp = Math.max(0, player.hp - missile.power)
+    const damage = oldHp - player.hp
+    
+    console.log(`플레이어 ${playerId} 데미지: ${oldHp} -> ${player.hp} (-${damage})`)
+    
+    // 플레이어 사망 처리
+    if (player.hp <= 0) {
+      console.log(`플레이어 ${playerId} 사망!`)
+      player.score = Math.max(player.score, player.point)
+      player.point = 0
+      player.hp = 100 // 부활
+    }
+    
+    // 미사일 제거
+    this.removeBullet(missileId)
+  }
+
+  // NPC 총알 충돌 처리
+  private handleNpcBulletCollision(bulletId: string, playerId: string) {
+    const bullet = this.state.npcBullets.get(bulletId)
+    const player = this.state.players.get(playerId)
+    
+    if (!bullet || !player) return
+    
+    console.log(`플레이어 ${playerId}가 NPC 총알 ${bulletId}에 맞음!`)
+    
+    // 플레이어 체력 감소
+    const oldHp = player.hp
+    player.hp = Math.max(0, player.hp - bullet.power)
+    const damage = oldHp - player.hp
+    
+    console.log(`플레이어 ${playerId} 데미지: ${oldHp} -> ${player.hp} (-${damage})`)
+    
+    // 플레이어 사망 처리
+    if (player.hp <= 0) {
+      console.log(`플레이어 ${playerId} 사망!`)
+      player.score = Math.max(player.score, player.point)
+      player.point = 0
+      player.hp = 100 // 부활
+    }
+    
+    // 총알 제거
+    this.removeBullet(bulletId)
+  }
+
+  // 플레이어 총알과 다른 플레이어 충돌 처리
+  private handlePlayerVsPlayerCollision(bulletId: string, playerId: string) {
+    const bullet = this.state.playerBullets.get(bulletId)
+    const player = this.state.players.get(playerId)
+    
+    if (!bullet || !player) return
+    
+    // 자신이 쏜 총알에 맞지 않도록 체크
+    if (bullet.owner_id === playerId) {
+      console.log(`플레이어 ${playerId}가 자신의 총알 ${bulletId}에 맞음 - 무시됨`)
+      return
+    }
+    
+    console.log(`플레이어 총알 ${bulletId}가 다른 플레이어 ${playerId}에 맞음!`)
+    
+    // 플레이어 체력 감소
+    const oldHp = player.hp
+    player.hp = Math.max(0, player.hp - bullet.power)
+    const damage = oldHp - player.hp
+    
+    console.log(`플레이어 ${playerId} 데미지: ${oldHp} -> ${player.hp} (-${damage})`)
+    
+    // 플레이어 사망 처리
+    if (player.hp <= 0) {
+      console.log(`플레이어 ${playerId} 사망!`)
+      player.score = Math.max(player.score, player.point)
+      player.point = 0
+      player.hp = 100 // 부활
+    }
+    
+    // 총알 제거
+    this.removeBullet(bulletId)
   }
 }
