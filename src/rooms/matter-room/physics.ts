@@ -49,7 +49,7 @@ export function createNpcBody(world: Matter.World, id: string, x: number, y: num
     frictionAir: 0.01,
     collisionFilter: {
       category: CATEGORY_NPC,
-      mask: CATEGORY_WALL | CATEGORY_BULLET | CATEGORY_PLAYER // NPC는 벽, 총알, 플레이어와 충돌
+      mask: CATEGORY_WALL | CATEGORY_BULLET // NPC는 벽, 총알 충돌
     }
   });
   Matter.World.add(world, body);
@@ -107,7 +107,7 @@ export function createPlayerBody(world: Matter.World, id: string) {
       slop: 0,  // 미세한 관통 허용치 (0으로 설정하여 정확한 충돌 처리)
       collisionFilter: {
         category: CATEGORY_PLAYER,
-        mask: CATEGORY_WALL | CATEGORY_BULLET | CATEGORY_NPC | CATEGORY_STAR // 플레이어는 벽, 총알, NPC, Star와만 충돌
+        mask: CATEGORY_WALL | CATEGORY_BULLET | CATEGORY_STAR // 플레이어는 벽, 총알, Star와만 충돌
       }
     }
   );

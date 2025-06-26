@@ -24,6 +24,9 @@ export class MatterRoom extends Room<State> {
   private playerController: PlayerController | null = null
   private starManager: StarManager | null = null
   
+  // NPC 스폰 상태 추적
+  private isSpawningNpcs: boolean = false // NPC 스폰 중인지 체크
+  
   // 성능 모니터링 및 에러 처리
   private errorCount: number = 0
   private performanceMetrics = {
@@ -84,7 +87,7 @@ export class MatterRoom extends Room<State> {
           this.npcWanderManager?.moveAllNpcs(deltaTime)
           this.starManager?.cleanupOldStars()
           
-          if (this.npcWanderManager?.followerManagers) {
+          if (this.npcWanderManager?.followerManagers && !this.isSpawningNpcs) {
             for (const fm of this.npcWanderManager.followerManagers) {
               const combatManager = fm.getCombatManager && fm.getCombatManager()
               combatManager?.syncAndCleanupNpcBullets(this.state.npcBullets)
@@ -125,11 +128,6 @@ export class MatterRoom extends Room<State> {
       Matter.Events.on(this.engine, 'collisionStart', (event) => {
         this.handleCollision(event)
       })
-      
-      if (this.npcWanderManager && this.state.npcs.size < 5) {
-        // 방 생성 시 자동으로 NPC 스폰 (플레이어가 없어도)
-        this.spawnInitialNpcs()
-      }
 
       if (this.isDevelopment) {
         console.log('=== MatterRoom onCreate 완료 ===')
@@ -200,31 +198,57 @@ export class MatterRoom extends Room<State> {
         console.error('shoot_bullet 메시지 처리 에러:', error)
       }
       try {
-        if (this.npcWanderManager && this.state.npcs.size < 5) {
-          this.npcWanderManager.spawnNpcs(
-            3, // 초기 리더 수
-            25, // 리더 크기
-            Math.floor(Math.random() * 8) + 4, // 팔로워 4 ~ 11 명
-            10 // 팔로워 크기
-          )
+        if (this.npcWanderManager && this.state.npcs.size < 5 && !this.isSpawningNpcs) {
+          // 스폰 상태 설정
+          this.isSpawningNpcs = true
+          
+          setTimeout(() => {
+            try {
+              this.npcWanderManager.spawnNpcs(
+                1, // 초기 리더 수
+                25, // 리더 크기
+                3, // 팔로워 수
+                10 // 팔로워 크기
+              )
+            } catch (error) {
+              console.error('spawn_npc 메시지 처리 에러:', error)
+            } finally {
+              // 스폰 완료 후 상태 해제
+              this.isSpawningNpcs = false
+            }
+          }, 100)
         }
       } catch (error) {
         console.error('spawn_npc 메시지 처리 에러:', error)
+        this.isSpawningNpcs = false // 에러 발생 시에도 상태 해제
       }      
     })
 
     this.onMessage('spawn_npc', (client, data) => {
       try {
-        if (this.npcWanderManager && this.state.npcs.size === 0) {
-          this.npcWanderManager.spawnNpcs(
-            3, // 초기 리더 수
-            25, // 리더 크기
-            Math.floor(Math.random() * 8) + 4, // 팔로워 4 ~ 11 명
-            10 // 팔로워 크기
-          )
+        if (this.npcWanderManager && this.state.npcs.size === 0 && !this.isSpawningNpcs) {
+          // 스폰 상태 설정
+          this.isSpawningNpcs = true
+          
+          setTimeout(() => {
+            try {
+              this.npcWanderManager.spawnNpcs(
+                1, // 초기 리더 수
+                25, // 리더 크기
+                Math.floor(Math.random() * 3) + 1, // 팔로워 1~3명
+                10 // 팔로워 크기
+              )
+            } catch (error) {
+              console.error('spawn_npc 메시지 처리 에러:', error)
+            } finally {
+              // 스폰 완료 후 상태 해제
+              this.isSpawningNpcs = false
+            }
+          }, 100)
         }
       } catch (error) {
         console.error('spawn_npc 메시지 처리 에러:', error)
+        this.isSpawningNpcs = false // 에러 발생 시에도 상태 해제
       }
     })
 
@@ -306,9 +330,9 @@ export class MatterRoom extends Room<State> {
     this.playerController.removePlayerFromGame(client.sessionId)
 
     // 모든 플레이어가 나가면 지연 삭제 스케줄링
-    // if (this.state.players.size === 0) {
-    //   this.scheduleRoomCleanup()
-    // }
+    if (this.state.players.size === 0) {
+      this.scheduleRoomCleanup()
+    }
   }
 
   private removeBullet(bulletId: string) {
@@ -440,30 +464,61 @@ export class MatterRoom extends Room<State> {
       console.log('초기 NPC 스폰 시작')
     }
     
+    // 이미 스폰 중이거나 정리 중이면 중단
+    if (this.isDisposing || !this.npcWanderManager || this.isSpawningNpcs) {
+      if (this.isDevelopment) {
+        console.log('스폰 중단: 방이 정리 중이거나 NPC 매니저가 없거나 이미 스폰 중')
+      }
+      return
+    }
+    
+    // 스폰 상태 설정
+    this.isSpawningNpcs = true
+    
     try {
       // NPC 수를 제한하여 성능 보장
-      const maxNpcs = 10;
+      const maxNpcs = 5; // 더 적은 수로 제한
       const currentNpcCount = this.state.npcs.size;
       
-      if (currentNpcCount < maxNpcs) {
-        const npcsToSpawn = Math.min(3, maxNpcs - currentNpcCount);
-        this.npcWanderManager?.spawnNpcs(
-          npcsToSpawn, // 최대 3개만 스폰
-          25,
-          Math.floor(Math.random() * 4) + 2, // 팔로워 2~5명으로 제한
-          15
-        )
-        
-        if (this.isDevelopment) {
-          console.log(`초기 NPC 스폰 완료: ${npcsToSpawn}개 리더, 팔로워 2~5명`)
-        }
-      } else {
+      if (currentNpcCount >= maxNpcs) {
         if (this.isDevelopment) {
           console.log('NPC 수가 최대치에 도달하여 스폰하지 않음')
         }
+        this.isSpawningNpcs = false // 스폰 상태 해제
+        return
       }
+      
+      // 비동기로 스폰하여 메인 스레드 블로킹 방지
+      setTimeout(() => {
+        try {
+          const npcsToSpawn = Math.min(2, maxNpcs - currentNpcCount); // 최대 2개만 스폰
+          const followerCount = Math.floor(Math.random() * 3) + 1; // 팔로워 1~3명으로 제한
+          
+          if (this.isDevelopment) {
+            console.log(`NPC 스폰 시작: ${npcsToSpawn}개 리더, 팔로워 ${followerCount}명`)
+          }
+          
+          this.npcWanderManager?.spawnNpcs(
+            npcsToSpawn,
+            25,
+            followerCount,
+            15
+          )
+          
+          if (this.isDevelopment) {
+            console.log(`초기 NPC 스폰 완료: ${npcsToSpawn}개 리더, 팔로워 ${followerCount}명`)
+          }
+        } catch (error) {
+          console.error('비동기 NPC 스폰 에러:', error)
+        } finally {
+          // 스폰 완료 후 상태 해제
+          this.isSpawningNpcs = false
+        }
+      }, 100) // 100ms 지연으로 메인 스레드 블로킹 방지
+      
     } catch (error) {
       console.error('초기 NPC 스폰 에러:', error)
+      this.isSpawningNpcs = false // 에러 발생 시에도 상태 해제
     }
   }
 

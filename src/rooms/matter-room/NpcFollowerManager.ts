@@ -44,6 +44,9 @@ export class NpcFollowerManager extends NpcBaseController {
   private bullets: MapSchema<Bullet> | null = null
   private matterRoom: any = null
   private isDevelopment: boolean = process.env.NODE_ENV !== 'production'
+  
+  // 스폰 상태 추적
+  private isSpawningFollowers: boolean = false // 팔로워 스폰 중인지 체크
 
   constructor(
     engine: Matter.Engine,
@@ -109,59 +112,118 @@ export class NpcFollowerManager extends NpcBaseController {
       const followerIds = Array.from(this.myNpcIds)
       followerIds.forEach((followerId, index) => {
         this.formationManager.assignRole(followerId, index, followerIds.length)
-      })
-      
-      if (this.isDevelopment) {
-        console.log(`[FOLLOWER] 대형 변경: ${randomFormation}`)
-      }
+        if (this.isDevelopment) {
+          console.log(`[FOLLOWER] 대형 변경: ${randomFormation}, NPC 갯수: ${followerIds.length}`)
+        }
+      })      
     }, 10000)
   }
 
   spawnFollowers(count: number, size: number) {
+    // 이미 스폰 중이면 중단
+    if (this.isSpawningFollowers) {
+      if (this.isDevelopment) {
+        console.log('[FOLLOWER] 이미 팔로워 스폰 중이므로 중단')
+      }
+      return
+    }
+    
+    // 스폰 상태 설정
+    this.isSpawningFollowers = true
+    
+    if (this.isDevelopment) {
+      console.log(`[FOLLOWER] 팔로워 스폰 시작: ${count}명`)
+    }
+    
     const leader = this.npcs.get(this.leaderId)
-    if (!leader) return
+    if (!leader) {
+      console.error(`[FOLLOWER] 리더 ${this.leaderId}를 찾을 수 없음`)
+      this.isSpawningFollowers = false // 상태 해제
+      return
+    }
 
     const leaderBody = this.world.bodies.find((b) => b.label === this.leaderId)
-    if (!leaderBody) return
+    if (!leaderBody) {
+      console.error(`[FOLLOWER] 리더 ${this.leaderId}의 바디를 찾을 수 없음`)
+      this.isSpawningFollowers = false // 상태 해제
+      return
+    }
 
-    // 단순히 리더 근처에 생성하고 역할만 할당
-    for (let i = 0; i < count; i++) {
-      const id = `${this.leaderId}_follower_${i}`
+    try {
+      // 단순히 리더 근처에 생성하고 역할만 할당
+      for (let i = 0; i < count; i++) {
+        try {
+          const id = `${this.leaderId}_follower_${i}`
 
-      // 리더 위치에서 약간 랜덤하게 생성 (대형은 moveAllFollowers에서 자동으로 맞춰짐)
-      const offsetX = (Math.random() - 0.5) * 50
-      const offsetY = (Math.random() - 0.5) * 50
+          // 리더 위치에서 약간 랜덤하게 생성 (대형은 moveAllFollowers에서 자동으로 맞춰짐)
+          const offsetX = (Math.random() - 0.5) * 50
+          const offsetY = (Math.random() - 0.5) * 50
 
-      this.createFollower(
-        leaderBody.position.x + offsetX,
-        leaderBody.position.y + offsetY,
-        size,
-        id
-      )
+          this.createFollower(
+            leaderBody.position.x + offsetX,
+            leaderBody.position.y + offsetY,
+            size,
+            id
+          )
 
-      // 역할만 할당 (대형별 로직)
-      this.formationManager.assignRole(id, i, count)
+          // 역할만 할당 (대형별 로직)
+          this.formationManager.assignRole(id, i, count)
+          
+          if (this.isDevelopment) {
+            console.log(`[FOLLOWER] 팔로워 ${i+1}/${count} 생성 완료: ${id}`)
+          }
+        } catch (followerError) {
+          console.error(`[FOLLOWER] 팔로워 ${i}번째 생성 실패:`, followerError)
+          continue // 이 팔로워는 건너뛰고 다음으로
+        }
+      }
+      
+      if (this.isDevelopment) {
+        console.log(`[FOLLOWER] 팔로워 스폰 완료: ${count}명`)
+      }
+    } catch (error) {
+      console.error('[FOLLOWER] 팔로워 스폰 전체 실패:', error)
+    } finally {
+      // 스폰 완료 후 상태 해제
+      this.isSpawningFollowers = false
     }
   }
 
   private createFollower(x: number, y: number, size: number, id: string) {
-    // 화면 영역 내로 좌표 보정
-    const clampedX = clamp(x, MARGIN, SCREEN_WIDTH - MARGIN)
-    const clampedY = clamp(y, MARGIN, SCREEN_HEIGHT - MARGIN)
-    const body = createNpcBody(this.world, id, clampedX, clampedY, size / 2)
+    try {
+      // 화면 영역 내로 좌표 보정
+      const clampedX = clamp(x, MARGIN, SCREEN_WIDTH - MARGIN)
+      const clampedY = clamp(y, MARGIN, SCREEN_HEIGHT - MARGIN)
+      
+      // Matter.js 바디 생성 시 예외 처리
+      let body;
+      try {
+        body = createNpcBody(this.world, id, clampedX, clampedY, size / 2)
+      } catch (bodyError) {
+        console.error(`[FOLLOWER] 팔로워 바디 생성 실패: ${id}`, bodyError)
+        throw bodyError
+      }
 
-    const npc = new Npc()
-    npc.id = id
-    npc.type = 'follower'
-    npc.x = clampedX
-    npc.y = clampedY
-    npc.hp = 50
-    npc.owner_id = 'server'
-    npc.size = size
-    this.npcs.set(id, npc)
-    this.myNpcIds.add(id) // 생성한 NPC ID 추가
-    // 최초 방향은 임의로 (1,0) 전방
-    this.npcDirs.set(id, { x: 1, y: 0 })
+      const npc = new Npc()
+      npc.id = id
+      npc.type = 'follower'
+      npc.x = clampedX
+      npc.y = clampedY
+      npc.hp = 50
+      npc.owner_id = 'server'
+      npc.size = size
+      this.npcs.set(id, npc)
+      this.myNpcIds.add(id) // 생성한 NPC ID 추가
+      // 최초 방향은 임의로 (1,0) 전방
+      this.npcDirs.set(id, { x: 1, y: 0 })
+      
+      if (this.isDevelopment) {
+        console.log(`[FOLLOWER] 팔로워 생성 완료: ${id} at (${clampedX}, ${clampedY})`)
+      }
+    } catch (error) {
+      console.error(`[FOLLOWER] 팔로워 생성 실패: ${id}`, error)
+      throw error
+    }
   }
 
   moveAllFollowers(deltaTime: number) {

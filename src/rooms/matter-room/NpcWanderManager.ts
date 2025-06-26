@@ -24,6 +24,9 @@ export class NpcWanderManager extends NpcBaseController {
   private combatManager?: NpcCombatManager;
   public matterRoom?: any; // MatterRoom 참조
   private isDevelopment: boolean = process.env.NODE_ENV !== 'production';
+  
+  // 스폰 상태 추적
+  private isSpawning: boolean = false // 스폰 중인지 체크
 
   constructor(engine: Matter.Engine, npcs: MapSchema<Npc>, bullets: MapSchema<Bullet>, players: MapSchema<Player>) {
     super(engine, npcs);
@@ -81,50 +84,109 @@ export class NpcWanderManager extends NpcBaseController {
 
   // 여러 그룹을 독립적으로 관리 (각 wander NPC마다 별도의 followerManager)
   public spawnNpcs(count: number, size: number, followerCount?: number, followerSize?: number) {
-    for (let i = 0; i < count; i++) {
-      const leader_id = `npc_leader_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
-      const x = Math.random() * (SCREEN_WIDTH - 2 * 40) + 40;
-      const y = Math.random() * (SCREEN_HEIGHT - 2 * 40) + 40;
-      const npcBody = createNpcBody(this.world, leader_id, x, y, size / 2)
-      Matter.World.add(this.world, npcBody);
-      const npc = new Npc();
-      npc.id = leader_id;
-      npc.type = 'leader';
-      npc.x = x;
-      npc.y = y;
-      npc.size = size;
-      npc.shape = 'circle';
-      npc.hp = 100;
-      npc.owner_id = 'server';
-      npc.power = 10;
-      npc.color = '#FFB300'; // 임의 색상
-      this.npcs.set(leader_id, npc);
-      this.myNpcIds.add(leader_id); // 생성한 NPC ID 추가
-      this.npcDirs.set(leader_id, { x: 1, y: 0 });
-      this.npcTargets.set(leader_id, getRandomTargetNear(x, y, NPC_MOVE_RADIUS, { x: 1, y: 0 }));
-      
-      if (followerCount && followerSize) {
-        const followerManager = new NpcFollowerManager(
-          this.engine,
-          this.npcs,
-          leader_id,
-          'v',
-          this.statePlayers,
-          this.bullets
-        );
-        
-        // WanderManager 참조 설정
-        followerManager.setWanderManager(this);
-        
-        // MatterRoom 참조 설정
-        if (this.matterRoom) {
-          followerManager.setMatterRoom(this.matterRoom);
-        }
-        
-        followerManager.spawnFollowers(followerCount, followerSize);
-        followerManager.enableCombat();
-        this.followerManagers.push(followerManager);
+    // 이미 스폰 중이면 중단
+    if (this.isSpawning) {
+      if (this.isDevelopment) {
+        console.log('[WANDER] 이미 스폰 중이므로 중단')
       }
+      return
+    }
+    
+    // 스폰 상태 설정
+    this.isSpawning = true
+    
+    if (this.isDevelopment) {
+      console.log(`[WANDER] NPC 스폰 시작: ${count}개 리더, 팔로워 ${followerCount || 0}명`)
+    }
+    
+    try {
+      for (let i = 0; i < count; i++) {
+        try {
+          const leader_id = `npc_leader_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
+          const x = Math.random() * (SCREEN_WIDTH - 2 * 40) + 40;
+          const y = Math.random() * (SCREEN_HEIGHT - 2 * 40) + 40;
+          
+          // Matter.js 바디 생성 시 예외 처리
+          let npcBody;
+          try {
+            npcBody = createNpcBody(this.world, leader_id, x, y, size / 2)
+            Matter.World.add(this.world, npcBody);
+          } catch (bodyError) {
+            console.error(`[WANDER] NPC 바디 생성 실패: ${leader_id}`, bodyError)
+            continue // 이 NPC는 건너뛰고 다음으로
+          }
+          
+          const npc = new Npc();
+          npc.id = leader_id;
+          npc.type = 'leader';
+          npc.x = x;
+          npc.y = y;
+          npc.size = size;
+          npc.shape = 'circle';
+          npc.hp = 100;
+          npc.owner_id = 'server';
+          npc.power = 10;
+          npc.color = '#FFB300'; // 임의 색상
+          
+          this.npcs.set(leader_id, npc);
+          this.myNpcIds.add(leader_id); // 생성한 NPC ID 추가
+          this.npcDirs.set(leader_id, { x: 1, y: 0 });
+          this.npcTargets.set(leader_id, getRandomTargetNear(x, y, NPC_MOVE_RADIUS, { x: 1, y: 0 }));
+          
+          if (this.isDevelopment) {
+            console.log(`[WANDER] 리더 NPC 생성 완료: ${leader_id} at (${x}, ${y})`)
+          }
+          
+          // 팔로워 매니저 생성 (비동기로 처리)
+          if (followerCount && followerSize) {
+            setTimeout(() => {
+              try {
+                const followerManager = new NpcFollowerManager(
+                  this.engine,
+                  this.npcs,
+                  leader_id,
+                  'v',
+                  this.statePlayers,
+                  this.bullets
+                );
+                
+                // WanderManager 참조 설정
+                followerManager.setWanderManager(this);
+                
+                // MatterRoom 참조 설정
+                if (this.matterRoom) {
+                  followerManager.setMatterRoom(this.matterRoom);
+                }
+                
+                // 팔로워 스폰
+                followerManager.spawnFollowers(followerCount, followerSize);
+                followerManager.enableCombat();
+                this.followerManagers.push(followerManager);
+                
+                if (this.isDevelopment) {
+                  console.log(`[WANDER] 팔로워 매니저 생성 완료: ${leader_id}의 ${followerCount}명 팔로워`)
+                }
+              } catch (followerError) {
+                console.error(`[WANDER] 팔로워 매니저 생성 실패: ${leader_id}`, followerError)
+              }
+            }, i * 50) // 각 리더마다 50ms씩 지연하여 부하 분산
+          }
+          
+        } catch (npcError) {
+          console.error(`[WANDER] NPC ${i}번째 생성 실패:`, npcError)
+          continue // 이 NPC는 건너뛰고 다음으로
+        }
+      }
+      
+      if (this.isDevelopment) {
+        console.log(`[WANDER] NPC 스폰 완료: ${count}개 리더 생성됨`)
+      }
+      
+    } catch (error) {
+      console.error('[WANDER] NPC 스폰 전체 실패:', error)
+    } finally {
+      // 스폰 완료 후 상태 해제
+      this.isSpawning = false
     }
   }
   // 모든 NPC 이동
