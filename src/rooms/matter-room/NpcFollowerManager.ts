@@ -37,6 +37,14 @@ export class NpcFollowerManager extends NpcBaseController {
   // WanderManager 참조 추가
   private wanderManager: any = null
 
+  // 매니저가 정리되었는지 확인하는 플래그 추가
+  private isCleanedUp: boolean = false
+
+  // 추가 속성들
+  private bullets: MapSchema<Bullet> | null = null
+  private matterRoom: any = null
+  private isDevelopment: boolean = process.env.NODE_ENV !== 'production'
+
   constructor(
     engine: Matter.Engine,
     npcs: MapSchema<Npc>,
@@ -47,12 +55,13 @@ export class NpcFollowerManager extends NpcBaseController {
   ) {
     super(engine, npcs)
     this.leaderId = leaderId
-    if (statePlayers) this.statePlayers = statePlayers
+    this.statePlayers = statePlayers || null
+    this.bullets = bullets || null
 
-    // 매니저 클래스들 초기화
+    // 매니저 시스템들 초기화 (올바른 생성자 시그니처 사용)
     this.formationManager = new NpcFormationManager(
       this.world,
-      npcs,
+      this.npcs,
       this.myNpcIds,
       new Map(), // followerRoles
       new Map(), // scatterTargets
@@ -61,20 +70,19 @@ export class NpcFollowerManager extends NpcBaseController {
       Math.PI / 4, // formationAngle
       50 // formationSpacing
     )
-
+  
     this.movementManager = new NpcMovementManager(
       this.world,
-      npcs,
+      this.npcs,
       this.myNpcIds,
       this.npcDirs,
       this.formationManager,
       1 // speedMultiplier
     )
 
-    // 리더 매니저 초기화 시 콜백 전달
     this.leaderManager = new NpcLeaderManager(
       this.world,
-      npcs,
+      this.npcs,
       this.myNpcIds,
       this.leaderId,
       100, // election delay
@@ -82,62 +90,31 @@ export class NpcFollowerManager extends NpcBaseController {
     )
 
     // 전투 매니저 초기화
-    if (bullets && statePlayers) {
+    if (this.bullets && this.statePlayers) {
       this.combatManager = new NpcCombatManager(
         this.engine,
-        npcs,
-        statePlayers,
-        bullets
+        this.npcs,
+        this.statePlayers,
+        this.bullets
       )
     }
 
-    // 10초마다 formation 타입 변경
+    // 대형 변경 타이머 설정 (10초마다 랜덤 대형 변경)
     this.formationChangeTimer = setInterval(() => {
-      const formationTypes: NpcFormationType[] = [
-        'v',
-        'scatter',
-        'hline',
-        'escort',
-        'line',
-      ]
-      const currentType = this.formationManager.getFormationType()
-      const currentIndex = formationTypes.indexOf(currentType)
-      const nextIndex = (currentIndex + 1) % formationTypes.length
-      const newFormationType = formationTypes[nextIndex]
-
-      // formation 타입 변경
-      this.formationManager.setFormationType(newFormationType)
-
-      // 새로운 formation에 맞게 역할 재할당
-      this.myNpcIds.forEach((id) => {
-        const index = Array.from(this.myNpcIds).indexOf(id)
-        this.formationManager.assignRole(id, index, this.myNpcIds.size)
+      const formationTypes: NpcFormationType[] = ['v', 'line', 'escort', 'scatter', 'hline']
+      const randomFormation = formationTypes[Math.floor(Math.random() * formationTypes.length)]
+      this.formationManager.setFormationType(randomFormation)
+      
+      // 모든 팔로워의 역할 재할당
+      const followerIds = Array.from(this.myNpcIds)
+      followerIds.forEach((followerId, index) => {
+        this.formationManager.assignRole(followerId, index, followerIds.length)
       })
-    }, 10000) // 10초마다 실행
-  }
-  // 리더 변경 콜백 함수
-  private onLeaderChanged(oldLeaderId: string, newLeaderId: string) {
-    console.log(
-      `[FOLLOWER] 리더 변경 콜백 받음: ${oldLeaderId} -> ${newLeaderId}`
-    )
-
-    // 1. 자체 리더 ID 업데이트
-    this.changeLeader(newLeaderId)
-
-    // 2. WanderManager에게 새 리더 등록 요청
-    if (this.wanderManager) {
-      console.log(
-        `[FOLLOWER] WanderManager에 새 리더 등록 요청: ${newLeaderId}`
-      )
-      this.wanderManager.registerNewLeader(newLeaderId, oldLeaderId)
-    } else {
-      console.log(`[FOLLOWER] WanderManager 참조가 없습니다!`)
-    }
-  }
-
-  // WanderManager 참조 설정 메서드 추가
-  public setWanderManager(wanderManager: any) {
-    this.wanderManager = wanderManager
+      
+      if (this.isDevelopment) {
+        console.log(`[FOLLOWER] 대형 변경: ${randomFormation}`)
+      }
+    }, 10000)
   }
 
   spawnFollowers(count: number, size: number) {
@@ -188,6 +165,11 @@ export class NpcFollowerManager extends NpcBaseController {
   }
 
   moveAllFollowers(deltaTime: number) {
+    // 매니저가 정리되었으면 조기 종료
+    if (this.isCleanedUp) {
+      return
+    }
+
     const leader = this.npcs.get(this.leaderId)
     const leaderBody = this.world.bodies.find((b) => b.label === this.leaderId)
 
@@ -368,6 +350,11 @@ export class NpcFollowerManager extends NpcBaseController {
 
   // 타이머 정리 메서드
   public cleanup() {
+    // 이미 정리되었으면 중복 실행 방지
+    if (this.isCleanedUp) {
+      return
+    }
+
     if (this.formationChangeTimer) {
       clearInterval(this.formationChangeTimer)
       this.formationChangeTimer = null
@@ -404,6 +391,44 @@ export class NpcFollowerManager extends NpcBaseController {
     this.temporaryTargetPlayerId = null
     this.combatEnabled = false
     
+    // 정리 완료 플래그 설정
+    this.isCleanedUp = true
+    
     console.log(`[FOLLOWER] 팔로워 매니저 정리 완료: ${this.leaderId}`)
+  }
+
+  // 매니저가 정리되었는지 확인하는 getter 메서드
+  public getIsCleanedUp(): boolean {
+    return this.isCleanedUp
+  }
+
+  // WanderManager 참조 설정 메서드
+  public setWanderManager(wanderManager: any) {
+    this.wanderManager = wanderManager
+  }
+
+  // MatterRoom 참조 설정 메서드
+  public setMatterRoom(matterRoom: any) {
+    this.matterRoom = matterRoom
+  }
+
+  // 리더 변경 콜백 함수
+  private onLeaderChanged(oldLeaderId: string, newLeaderId: string) {
+    console.log(
+      `[FOLLOWER] 리더 변경 콜백 받음: ${oldLeaderId} -> ${newLeaderId}`
+    )
+
+    // 1. 자체 리더 ID 업데이트
+    this.changeLeader(newLeaderId)
+
+    // 2. WanderManager에게 새 리더 등록 요청
+    if (this.wanderManager) {
+      console.log(
+        `[FOLLOWER] WanderManager에 새 리더 등록 요청: ${newLeaderId}`
+      )
+      this.wanderManager.registerNewLeader(newLeaderId, oldLeaderId)
+    } else {
+      console.log(`[FOLLOWER] WanderManager 참조가 없습니다!`)
+    }
   }
 }

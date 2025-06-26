@@ -126,9 +126,11 @@ export class MatterRoom extends Room<State> {
         this.handleCollision(event)
       })
       
-      // 방 생성 시 자동으로 NPC 스폰 (플레이어가 없어도)
-      this.spawnInitialNpcs()
-      
+      if (this.npcWanderManager && this.state.npcs.size < 5) {
+        // 방 생성 시 자동으로 NPC 스폰 (플레이어가 없어도)
+        this.spawnInitialNpcs()
+      }
+
       if (this.isDevelopment) {
         console.log('=== MatterRoom onCreate 완료 ===')
       }
@@ -197,6 +199,18 @@ export class MatterRoom extends Room<State> {
       } catch (error) {
         console.error('shoot_bullet 메시지 처리 에러:', error)
       }
+      try {
+        if (this.npcWanderManager && this.state.npcs.size < 5) {
+          this.npcWanderManager.spawnNpcs(
+            3, // 초기 리더 수
+            25, // 리더 크기
+            Math.floor(Math.random() * 8) + 4, // 팔로워 4 ~ 11 명
+            10 // 팔로워 크기
+          )
+        }
+      } catch (error) {
+        console.error('spawn_npc 메시지 처리 에러:', error)
+      }      
     })
 
     this.onMessage('spawn_npc', (client, data) => {
@@ -527,7 +541,7 @@ export class MatterRoom extends Room<State> {
     
     if (!npc) return
     
-    console.log(`플레이어 총알 ${bulletId}가 NPC ${npcId}에 맞음!`)
+    // console.log(`플레이어 총알 ${bulletId}가 NPC ${npcId}에 맞음!`)
     
     // NPC 체력 감소
     npc.hp -= npc.type === 'leader' ? bullet.power * 0.5 : bullet.power
@@ -650,7 +664,7 @@ export class MatterRoom extends Room<State> {
     
     // 자신이 쏜 총알에 맞지 않도록 체크
     if (bullet.owner_id === playerId) {
-      console.log(`플레이어 ${playerId}가 자신의 총알 ${bulletId}에 맞음 - 무시됨`)
+      // console.log(`플레이어 ${playerId}가 자신의 총알 ${bulletId}에 맞음 - 무시됨`)
       return
     }
     

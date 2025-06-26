@@ -116,6 +116,11 @@ export class NpcWanderManager extends NpcBaseController {
         // WanderManager 참조 설정
         followerManager.setWanderManager(this);
         
+        // MatterRoom 참조 설정
+        if (this.matterRoom) {
+          followerManager.setMatterRoom(this.matterRoom);
+        }
+        
         followerManager.spawnFollowers(followerCount, followerSize);
         followerManager.enableCombat();
         this.followerManagers.push(followerManager);
@@ -216,6 +221,9 @@ export class NpcWanderManager extends NpcBaseController {
       }
       fm.moveAllFollowers(deltaTime);
     }
+    
+    // 정리된 팔로워 매니저들을 배열에서 제거
+    this.followerManagers = this.followerManagers.filter(fm => !fm.getIsCleanedUp());
   }
 
   // NPC 제거 시 관련 데이터 정리
