@@ -306,9 +306,9 @@ export class MatterRoom extends Room<State> {
     this.playerController.removePlayerFromGame(client.sessionId)
 
     // 모든 플레이어가 나가면 지연 삭제 스케줄링
-    if (this.state.players.size === 0) {
-      this.scheduleRoomCleanup()
-    }
+    // if (this.state.players.size === 0) {
+    //   this.scheduleRoomCleanup()
+    // }
   }
 
   private removeBullet(bulletId: string) {
