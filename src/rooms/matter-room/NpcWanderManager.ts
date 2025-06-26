@@ -23,23 +23,23 @@ export class NpcWanderManager extends NpcBaseController {
   private bullets: MapSchema<Bullet>;
   private combatManager?: NpcCombatManager;
   public matterRoom?: any; // MatterRoom 참조
+  private isDevelopment: boolean = process.env.NODE_ENV !== 'production';
 
   constructor(engine: Matter.Engine, npcs: MapSchema<Npc>, bullets: MapSchema<Bullet>, players: MapSchema<Player>) {
-    console.log('=== NpcWanderManager 생성자 진입 ===')
     super(engine, npcs);
-    console.log('1. NpcWanderManager - 부모 클래스 초기화 완료')
+    
+    if (this.isDevelopment) {
+      console.log('=== NpcWanderManager 생성자 진입 ===')
+    }
     
     try {
       this.bullets = bullets;
-      console.log('2. NpcWanderManager - bullets 설정 완료')
-      
       this.combatManager = new NpcCombatManager(engine, npcs, players, bullets);
-      console.log('3. NpcWanderManager - combatManager 생성 완료')
-      
       this.statePlayers = players;
-      console.log('4. NpcWanderManager - statePlayers 설정 완료')
       
-      console.log('=== NpcWanderManager 생성자 완료 ===')
+      if (this.isDevelopment) {
+        console.log('=== NpcWanderManager 생성자 완료 ===')
+      }
     } catch (error) {
       console.error('=== NpcWanderManager 생성자 에러 ===:', error)
       throw error
@@ -54,7 +54,9 @@ export class NpcWanderManager extends NpcBaseController {
 
   // 새 리더 등록 메서드 추가
   public registerNewLeader(newLeaderId: string, oldLeaderId: string) {
-    console.log(`[WANDER] 새 리더 등록 요청 받음: ${newLeaderId} (이전: ${oldLeaderId})`)
+    if (this.isDevelopment) {
+      console.log(`[WANDER] 새 리더 등록 요청 받음: ${newLeaderId} (이전: ${oldLeaderId})`)
+    }
     
     // 1. 새 리더를 wandering NPC 목록에 추가
     this.myNpcIds.add(newLeaderId)
@@ -67,9 +69,13 @@ export class NpcWanderManager extends NpcBaseController {
       // 현재 위치 근처에서 새로운 타겟 설정
       const target = getRandomTargetNear(newLeader.x, newLeader.y, NPC_MOVE_RADIUS, { x: 1, y: 0 })
       this.npcTargets.set(newLeaderId, target)
-      console.log(`[WANDER] 새 리더 ${newLeaderId} wandering 시작, 타겟: (${target.x}, ${target.y})`)
+      if (this.isDevelopment) {
+        console.log(`[WANDER] 새 리더 ${newLeaderId} wandering 시작, 타겟: (${target.x}, ${target.y})`)
+      }
     } else {
-      console.log(`[WANDER] 새 리더 ${newLeaderId}를 찾을 수 없음`)
+      if (this.isDevelopment) {
+        console.log(`[WANDER] 새 리더 ${newLeaderId}를 찾을 수 없음`)
+      }
     }
   }
 
@@ -118,9 +124,7 @@ export class NpcWanderManager extends NpcBaseController {
   }
   // 모든 NPC 이동
   public moveAllNpcs(deltaTime: number) {
-    console.log('moveAllNpcs 진입', this.myNpcIds)
     for (const id of this.myNpcIds) {
-      console.log('moveAllNpcs: npcId=', id)
       const npc = this.npcs.get(id);
       if (!npc) continue;
       const npcBody = this.world.bodies.find((b) => b.label === id);
@@ -227,7 +231,9 @@ export class NpcWanderManager extends NpcBaseController {
       try {
         // 월드에서 바디 즉시 제거
         Matter.World.remove(this.world, npcBody);
-        console.log(`[WANDER] 바디 제거 완료: ${npcId}`)
+        if (this.isDevelopment) {
+          console.log(`[WANDER] 바디 제거 완료: ${npcId}`)
+        }
       } catch (error) {
         console.warn(`[WANDER] 바디 제거 실패: ${npcId}`, error)
       }
@@ -235,7 +241,9 @@ export class NpcWanderManager extends NpcBaseController {
 
     // NPC 상태에서 제거
     this.npcs.delete(npcId);
-    console.log(`[WANDER] NPC 상태 제거 완료: ${npcId}`)
+    if (this.isDevelopment) {
+      console.log(`[WANDER] NPC 상태 제거 완료: ${npcId}`)
+    }
     
     // 내부 데이터 정리
     this.myNpcIds.delete(npcId)
@@ -247,19 +255,25 @@ export class NpcWanderManager extends NpcBaseController {
       const fm = this.followerManagers[i]
       if (fm.leaderId === npcId) {
         // 리더가 죽었으므로 팔로워들을 wandering NPC로 변환
-        console.log(`[WANDER] 리더 ${npcId} 죽음, 팔로워들을 wandering NPC로 변환`)
+        if (this.isDevelopment) {
+          console.log(`[WANDER] 리더 ${npcId} 죽음, 팔로워들을 wandering NPC로 변환`)
+        }
         
         // 팔로워 매니저 정리 (내부에서 팔로워들을 wandering NPC로 변환)
         fm.cleanup()
         this.followerManagers.splice(i, 1)
-        console.log(`[WANDER] 팔로워 매니저 정리 완료: ${npcId}`)
+        if (this.isDevelopment) {
+          console.log(`[WANDER] 팔로워 매니저 정리 완료: ${npcId}`)
+        }
       } else {
         // 팔로워가 죽었으므로 해당 팔로워만 정리
         fm.removeFollowerNpc(npcId)
       }
     }
     
-    console.log(`[WANDER] NPC 완전 정리 완료: ${npcId}`)
-    console.log(`[WANDER] 현재 월드 바디 수: ${this.world.bodies.length}`)
+    if (this.isDevelopment) {
+      console.log(`[WANDER] NPC 완전 정리 완료: ${npcId}`)
+      console.log(`[WANDER] 현재 월드 바디 수: ${this.world.bodies.length}`)
+    }
   }
 }

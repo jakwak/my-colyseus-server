@@ -76,13 +76,33 @@ export default config({
         console.error('Unhandled Rejection at:', promise, 'reason:', reason);
     });
 
-    // 메모리 사용량 모니터링
+    // 메모리 사용량 모니터링 강화
     setInterval(() => {
         const memUsage = process.memoryUsage();
-        if (memUsage.heapUsed > 100 * 1024 * 1024) { // 100MB 이상 사용 시 경고
-          console.log(`메모리 사용량: ${Math.round(memUsage.heapUsed / 1024 / 1024)}MB`);
-          console.warn('메모리 사용량이 높습니다! 메모리 사용량을 줄이세요!');
+        const heapUsedMB = Math.round(memUsage.heapUsed / 1024 / 1024);
+        const heapTotalMB = Math.round(memUsage.heapTotal / 1024 / 1024);
+        const externalMB = Math.round(memUsage.external / 1024 / 1024);
+        
+        if (heapUsedMB > 100) {
+          console.warn(`메모리 사용량: ${heapUsedMB}MB / ${heapTotalMB}MB (외부: ${externalMB}MB)`);
+          
+          // 가비지 컬렉션 강제 실행 (Node.js가 --expose-gc 플래그로 실행된 경우)
+          if (global.gc) {
+            global.gc();
+            console.log('가비지 컬렉션 강제 실행 완료');
+          }
         }
-    }, 10000);
+        
+        if (heapUsedMB > 200) {
+          console.error(`메모리 사용량이 200MB를 초과했습니다: ${heapUsedMB}MB`);
+          console.error('서버를 재시작합니다...');
+          process.exit(1); // 서버 재시작
+        }
+        
+        // 메모리 누수 감지 (외부 메모리가 지속적으로 증가하는 경우)
+        if (externalMB > 50) {
+          console.warn(`외부 메모리 사용량이 높습니다: ${externalMB}MB`);
+        }
+    }, 5000); // 5초마다 체크
   },
 })

@@ -9,6 +9,8 @@
   },
   "scripts": {
     "start": "tsx watch src/index.ts",
+    "start:prod": "node --expose-gc build/index.js",
+    "start:dev": "node --expose-gc -r tsx/cjs src/index.ts",
     "loadtest": "tsx loadtest/example.ts --room my_room --numClients 2",
     "build": "npm run clean && tsc",
     "clean": "rimraf build",

@@ -15,7 +15,8 @@ import app from "./app.config";
 
 import { Encoder } from "@colyseus/schema";
 
-Encoder.BUFFER_SIZE = 128 * 1024; // 128KB
+// 버퍼 크기를 64KB로 조정하여 메모리 사용량 최적화
+Encoder.BUFFER_SIZE = 64 * 1024; // 64KB
 
 // Create and listen on 2567 (or PORT environment variable.)
 listen(app);

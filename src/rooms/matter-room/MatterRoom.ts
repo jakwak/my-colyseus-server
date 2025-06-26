@@ -23,6 +23,15 @@ export class MatterRoom extends Room<State> {
   private isDisposing: boolean = false // 방 정리 중인지 체크
   private playerController: PlayerController | null = null
   private starManager: StarManager | null = null
+  
+  // 성능 모니터링 및 에러 처리
+  private errorCount: number = 0
+  private performanceMetrics = {
+    frameCount: 0,
+    lastFpsCheck: Date.now(),
+    averageFrameTime: 0
+  }
+  private isDevelopment: boolean = process.env.NODE_ENV !== 'production'
 
   constructor() {
     super()
@@ -36,10 +45,11 @@ export class MatterRoom extends Room<State> {
 
   onCreate() {
     // 방이 생성될 때 한 번만 실행되는 초기화
-    console.log('=== MatterRoom 생성됨 - onCreate 진입 ===')
+    if (this.isDevelopment) {
+      console.log('=== MatterRoom 생성됨 - onCreate 진입 ===')
+    }
     
     try {
-      console.log('1. NPC 매니저 생성 직전')
       // NPC 매니저 초기화
       this.npcWanderManager = new NpcWanderManager(
         this.engine,
@@ -47,90 +57,104 @@ export class MatterRoom extends Room<State> {
         this.state.npcBullets,
         this.state.players
       )
-      console.log('2. NPC 매니저 생성 완료')
       
       this.npcWanderManager.matterRoom = this
-      console.log('3. NPC 매니저 matterRoom 설정 완료')
 
-      console.log('4. PlayerController 생성 직전')
       this.playerController = new PlayerController(
         this.engine,
         this.state.players,
         this.state.playerBullets,
         this.npcWanderManager
       )
-      console.log('5. PlayerController 생성 완료')
 
-      console.log('6. StarManager 생성 직전')
       this.starManager = new StarManager(
         this.engine,
         this.state.stars,
         this.state.players
       )
-      console.log('7. StarManager 생성 완료')
 
-      console.log('8. setSimulationInterval 등록 직전')
-      // 물리 업데이트 루프 시작
+      // 물리 업데이트 루프 시작 (30fps로 조정)
       this.setSimulationInterval((deltaTime) => {
-        console.log('=== 시뮬레이션 루프 진입 ===')
+        const startTime = Date.now();
         
         try {
-          console.log('8-1. Matter.Engine.update 시작')
           Matter.Engine.update(this.engine, deltaTime)
-          console.log('8-2. Matter.Engine.update 완료')
           
-          console.log('8-3. playerController.updateAndCleanupBullets 시작')
           this.playerController?.updateAndCleanupBullets()
-          console.log('8-4. playerController.updateAndCleanupBullets 완료')
-          
-          console.log('8-5. npcWanderManager.moveAllNpcs 시작')
           this.npcWanderManager?.moveAllNpcs(deltaTime)
-          console.log('8-6. npcWanderManager.moveAllNpcs 완료')
-          
-          console.log('8-7. starManager.cleanupOldStars 시작')
           this.starManager?.cleanupOldStars()
-          console.log('8-8. starManager.cleanupOldStars 완료')
           
-          console.log('8-9. followerManagers 루프 시작')
           if (this.npcWanderManager?.followerManagers) {
             for (const fm of this.npcWanderManager.followerManagers) {
               const combatManager = fm.getCombatManager && fm.getCombatManager()
               combatManager?.syncAndCleanupNpcBullets(this.state.npcBullets)
             }
           }
-          console.log('8-10. followerManagers 루프 완료')
           
-          console.log('=== 시뮬레이션 루프 완료 ===')
+          // 성능 측정
+          this.performanceMetrics.frameCount++;
+          const frameTime = Date.now() - startTime;
+          this.performanceMetrics.averageFrameTime = 
+            (this.performanceMetrics.averageFrameTime * 0.9) + (frameTime * 0.1);
+          
+          // 1초마다 FPS 체크
+          if (Date.now() - this.performanceMetrics.lastFpsCheck > 1000) {
+            const fps = this.performanceMetrics.frameCount;
+            if (this.isDevelopment) {
+              console.log(`FPS: ${fps}, 평균 프레임 시간: ${this.performanceMetrics.averageFrameTime.toFixed(2)}ms`);
+            }
+            
+            if (fps < 20) {
+              console.warn('FPS가 낮습니다! 성능 최적화가 필요합니다.');
+            }
+            
+            this.performanceMetrics.frameCount = 0;
+            this.performanceMetrics.lastFpsCheck = Date.now();
+          }
+          
         } catch (error) {
-          console.error('=== 시뮬레이션 루프 에러 ===:', error)
-          // 에러 발생 시 방을 안전하게 정리
-          this.safeDispose()
+          console.error('시뮬레이션 루프 에러:', error)
+          this.handleSimulationError(error)
         }
-      }, 1000 / 60)
-      console.log('9. setSimulationInterval 등록 완료')
+      }, 1000 / 30) // 30fps로 조정
 
-      console.log('10. setupMessageHandlers 호출 직전')
       // 메시지 핸들러 등록
       this.setupMessageHandlers()
-      console.log('11. setupMessageHandlers 호출 완료')
       
-      console.log('12. 충돌 이벤트 리스너 등록')
-      // 통합된 충돌 이벤트 리스너 등록
+      // 충돌 이벤트 리스너 등록
       Matter.Events.on(this.engine, 'collisionStart', (event) => {
         this.handleCollision(event)
       })
-      console.log('13. 충돌 이벤트 리스너 등록 완료')
       
-      console.log('14. 초기 NPC 스폰 시작')
       // 방 생성 시 자동으로 NPC 스폰 (플레이어가 없어도)
       this.spawnInitialNpcs()
-      console.log('15. 초기 NPC 스폰 완료')
       
-      console.log('=== MatterRoom onCreate 완료 ===')
+      if (this.isDevelopment) {
+        console.log('=== MatterRoom onCreate 완료 ===')
+      }
     } catch (error) {
       console.error('=== MatterRoom onCreate 에러 ===:', error)
       console.error('에러 스택:', (error as Error).stack)
       throw error
+    }
+  }
+
+  // 에러 복구 메커니즘
+  private handleSimulationError(error: any) {
+    console.error('시뮬레이션 에러 발생:', error)
+    
+    // 에러 카운터 증가
+    this.errorCount = this.errorCount + 1
+    
+    // 연속 에러가 5회 이상 발생하면 방 종료
+    if (this.errorCount > 5) {
+      console.error('연속 에러로 인한 방 종료')
+      this.safeDispose()
+    } else {
+      // 일시적으로 시뮬레이션 일시 중지
+      setTimeout(() => {
+        this.errorCount = 0
+      }, 5000)
     }
   }
 
@@ -398,11 +422,32 @@ export class MatterRoom extends Room<State> {
 
   // 초기 NPC 스폰 메서드
   private spawnInitialNpcs() {
-    console.log('초기 NPC 스폰 시작 - 3개 NPC 생성')
+    if (this.isDevelopment) {
+      console.log('초기 NPC 스폰 시작')
+    }
+    
     try {
-      // 초기 NPC 3개 생성 (각각 1개씩, 크기 40)
-      this.npcWanderManager?.spawnNpcs(3, 25, 5, 15)
-      console.log('초기 NPC 스폰 완료')
+      // NPC 수를 제한하여 성능 보장
+      const maxNpcs = 10;
+      const currentNpcCount = this.state.npcs.size;
+      
+      if (currentNpcCount < maxNpcs) {
+        const npcsToSpawn = Math.min(3, maxNpcs - currentNpcCount);
+        this.npcWanderManager?.spawnNpcs(
+          npcsToSpawn, // 최대 3개만 스폰
+          25,
+          Math.floor(Math.random() * 4) + 2, // 팔로워 2~5명으로 제한
+          15
+        )
+        
+        if (this.isDevelopment) {
+          console.log(`초기 NPC 스폰 완료: ${npcsToSpawn}개 리더, 팔로워 2~5명`)
+        }
+      } else {
+        if (this.isDevelopment) {
+          console.log('NPC 수가 최대치에 도달하여 스폰하지 않음')
+        }
+      }
     } catch (error) {
       console.error('초기 NPC 스폰 에러:', error)
     }
