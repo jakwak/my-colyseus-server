@@ -1,13 +1,13 @@
 module.exports = {
   apps: [
     {
-      name: 'colyseus-server-1',
+      name: 'colyseus',
       script: 'npm',
       args: 'start',
       cwd: '/Users/ondalssam/Desktop/my-colyseus-server',
       instances: 1,
       autorestart: true,
-      watch: false,
+      watch: true,
       max_memory_restart: '1G',
       env: { NODE_ENV: 'development', PORT: 2567 }
     },
@@ -18,7 +18,7 @@ module.exports = {
       cwd: '/Users/ondalssam/Desktop/svkit',
       instances: 1,
       autorestart: true,
-      watch: false,
+      watch: true,
       max_memory_restart: '1G',
       env: { NODE_ENV: 'development', PORT: 5173 }
     },
@@ -29,7 +29,7 @@ module.exports = {
       cwd: '/Users/ondalssam/Desktop/svkit',
       instances: 1,
       autorestart: true,
-      watch: false,
+      watch: true,
       max_memory_restart: '1G',
       env: { NODE_ENV: 'development', PORT: 4173 }
     },
@@ -39,7 +39,7 @@ module.exports = {
       cwd: '/Users/ondalssam/Desktop/hello_fastapi',
       instances: 1,
       autorestart: true,
-      watch: false,
+      watch: true,
       max_memory_restart: '1G',
       env: { PYTHONPATH: '/Users/ondalssam/Desktop/hello_fastapi', PORT: 8000 }
     }

@@ -109,7 +109,7 @@ export class MatterRoom extends Room<State> {
                   2
                 )}ms`
               )
-            }
+            } 
 
             if (fps < 20) {
               console.warn('FPS가 낮습니다! 성능 최적화가 필요합니다.')
@@ -122,7 +122,7 @@ export class MatterRoom extends Room<State> {
           console.error('시뮬레이션 루프 에러:', error)
           this.handleSimulationError(error)
         }
-      }, 1000 / 30) // 30fps로 조정
+      }, 1000 / 60) // 60fps로 조정
 
       // 메시지 핸들러 등록
       this.setupMessageHandlers()
