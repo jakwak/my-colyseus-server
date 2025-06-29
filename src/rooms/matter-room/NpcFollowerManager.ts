@@ -48,6 +48,9 @@ export class NpcFollowerManager extends NpcBaseController {
   // 스폰 상태 추적
   private isSpawningFollowers: boolean = false // 팔로워 스폰 중인지 체크
 
+  // 생성 시간 추적 (메모리 누수 방지용)
+  public createdAt: number = Date.now()
+
   constructor(
     engine: Matter.Engine,
     npcs: MapSchema<Npc>,

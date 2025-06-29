@@ -28,7 +28,7 @@ export class MatterRoom extends Room<State> {
   private spawnQueue: Array<{count: number, size: number, followerCount?: number, followerSize?: number}> = []
   private lastSpawnTime: number = 0
   private readonly SPAWN_COOLDOWN = 2000 // 2초 쿨다운
-  private readonly MAX_NPCS = 10 // 최대 NPC 수 제한
+  private readonly MAX_NPCS = 30 // 최대 NPC 수 제한 (10 -> 30으로 증가)
   private readonly MAX_SPAWN_PER_REQUEST = 1 // 한 번에 최대 스폰 수
 
   // 성능 모니터링 및 에러 처리
@@ -311,11 +311,42 @@ export class MatterRoom extends Room<State> {
       
       console.log(`플레이어 ${client.sessionId} 생성 완료 (방: ${this.roomId})`)
       
+      // 기존 NPC 정리 (새로운 플레이어를 위한 공간 확보)
+      this.cleanupExistingNpcs()
+      
       // NPC 스폰 시작
       this.startNpcSpawning()
     } catch (error) {
       console.error(`onJoin 에러 (방: ${this.roomId}):`, error)
       throw error
+    }
+  }
+
+  // 기존 NPC 정리 메서드 추가
+  private cleanupExistingNpcs() {
+    try {
+      const currentNpcCount = this.state.npcs.size
+      console.log(`[CLEANUP] 기존 NPC 정리 시작: ${currentNpcCount}개`)
+      
+      if (currentNpcCount > 0) {
+        // 모든 NPC ID 수집
+        const npcIds = Array.from(this.state.npcs.keys())
+        
+        // NPC 제거 (안전하게)
+        npcIds.forEach(npcId => {
+          try {
+            if (this.npcWanderManager) {
+              this.npcWanderManager.removeNpcWithCleanup(npcId)
+            }
+          } catch (error) {
+            console.error(`[CLEANUP] NPC ${npcId} 제거 실패:`, error)
+          }
+        })
+        
+        console.log(`[CLEANUP] 기존 NPC 정리 완료: ${npcIds.length}개 제거`)
+      }
+    } catch (error) {
+      console.error(`[CLEANUP] NPC 정리 중 오류:`, error)
     }
   }
 
@@ -941,13 +972,13 @@ export class MatterRoom extends Room<State> {
   // 자동 NPC 스폰 체크 및 처리
   private checkAndAutoSpawnNpcs() {
     const currentNpcCount = this.state.npcs.size
-    const targetNpcCount = 10
+    const targetNpcCount = 15 // 목표 NPC 수 증가 (10 -> 15)
     
-    if (currentNpcCount < 5 && !this.isSpawningNpcs) {
-      console.log(`[AUTO_SPAWN] NPC 개수: ${currentNpcCount}/5, 자동 스폰 시작`)
+    if (currentNpcCount < 8 && !this.isSpawningNpcs) { // 스폰 조건 완화 (5 -> 8)
+      console.log(`[AUTO_SPAWN] NPC 개수: ${currentNpcCount}/8, 자동 스폰 시작`)
       
-      // 스폰할 NPC 개수 계산 (최대 30개까지)
-      const npcsToSpawn = Math.min(targetNpcCount - currentNpcCount, 5) // 한 번에 최대 5개씩
+      // 스폰할 NPC 개수 계산 (최대 10개까지)
+      const npcsToSpawn = Math.min(targetNpcCount - currentNpcCount, 10) // 한 번에 최대 10개씩
       
       this.isSpawningNpcs = true
       
