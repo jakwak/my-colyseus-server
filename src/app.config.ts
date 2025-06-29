@@ -14,6 +14,8 @@ export default config({
      * Define your room handlers:
      */
     gameServer.define('my_room', MyRoom)
+    
+    // matter_room 정의
     gameServer.define('matter_room', MatterRoom)
   },
 
@@ -59,6 +61,8 @@ export default config({
     /**
      * Before before gameServer.listen() is called.
      */
+    
+    console.log('[APP_CONFIG] 서버 시작...')
     
     // 개발 환경에서만 상세한 에러 로그
     if (process.env.NODE_ENV !== "production") {

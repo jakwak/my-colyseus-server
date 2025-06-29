@@ -120,20 +120,26 @@ export class NpcFollowerManager extends NpcBaseController {
   }
 
   spawnFollowers(count: number, size: number) {
+    const spawnStartTime = Date.now()
+    console.log(`[FOLLOWER] === 팔로워 스폰 시작 ===`)
+    console.log(`[FOLLOWER] 리더: ${this.leaderId}, 요청: ${count}명 팔로워`)
+    
     // 이미 스폰 중이면 중단
     if (this.isSpawningFollowers) {
-      if (this.isDevelopment) {
-        console.log('[FOLLOWER] 이미 팔로워 스폰 중이므로 중단')
-      }
+      console.log('[FOLLOWER] 이미 팔로워 스폰 중이므로 중단')
+      return
+    }
+    
+    // 매니저가 정리되었으면 중단
+    if (this.isCleanedUp) {
+      console.log('[FOLLOWER] 매니저가 정리되었으므로 스폰 중단')
       return
     }
     
     // 스폰 상태 설정
     this.isSpawningFollowers = true
     
-    if (this.isDevelopment) {
-      console.log(`[FOLLOWER] 팔로워 스폰 시작: ${count}명`)
-    }
+    console.log(`[FOLLOWER] 팔로워 스폰 시작: ${count}명`)
     
     const leader = this.npcs.get(this.leaderId)
     if (!leader) {
@@ -142,6 +148,8 @@ export class NpcFollowerManager extends NpcBaseController {
       return
     }
 
+    console.log(`[FOLLOWER] 리더 NPC 찾음: ${this.leaderId}`)
+
     const leaderBody = this.world.bodies.find((b) => b.label === this.leaderId)
     if (!leaderBody) {
       console.error(`[FOLLOWER] 리더 ${this.leaderId}의 바디를 찾을 수 없음`)
@@ -149,15 +157,22 @@ export class NpcFollowerManager extends NpcBaseController {
       return
     }
 
+    console.log(`[FOLLOWER] 리더 바디 찾음: ${this.leaderId} at (${leaderBody.position.x.toFixed(2)}, ${leaderBody.position.y.toFixed(2)})`)
+
     try {
       // 단순히 리더 근처에 생성하고 역할만 할당
       for (let i = 0; i < count; i++) {
         try {
+          const followerStartTime = Date.now()
           const id = `${this.leaderId}_follower_${i}`
+
+          console.log(`[FOLLOWER] 팔로워 ${i+1}/${count} 생성 시작: ${id}`)
 
           // 리더 위치에서 약간 랜덤하게 생성 (대형은 moveAllFollowers에서 자동으로 맞춰짐)
           const offsetX = (Math.random() - 0.5) * 50
           const offsetY = (Math.random() - 0.5) * 50
+
+          console.log(`[FOLLOWER] 팔로워 ${i+1}/${count} 오프셋: (${offsetX.toFixed(2)}, ${offsetY.toFixed(2)})`)
 
           this.createFollower(
             leaderBody.position.x + offsetX,
@@ -167,20 +182,21 @@ export class NpcFollowerManager extends NpcBaseController {
           )
 
           // 역할만 할당 (대형별 로직)
+          console.log(`[FOLLOWER] 팔로워 ${i+1}/${count} 역할 할당 시작: ${id}`)
           this.formationManager.assignRole(id, i, count)
+          console.log(`[FOLLOWER] 팔로워 ${i+1}/${count} 역할 할당 완료: ${id}`)
           
-          if (this.isDevelopment) {
-            console.log(`[FOLLOWER] 팔로워 ${i+1}/${count} 생성 완료: ${id}`)
-          }
+          const followerElapsedTime = Date.now() - followerStartTime
+          console.log(`[FOLLOWER] 팔로워 ${i+1}/${count} 생성 완료: ${id} (소요시간: ${followerElapsedTime}ms)`)
         } catch (followerError) {
-          console.error(`[FOLLOWER] 팔로워 ${i}번째 생성 실패:`, followerError)
+          console.error(`[FOLLOWER] 팔로워 ${i+1}번째 생성 실패:`, followerError)
           continue // 이 팔로워는 건너뛰고 다음으로
         }
       }
       
-      if (this.isDevelopment) {
-        console.log(`[FOLLOWER] 팔로워 스폰 완료: ${count}명`)
-      }
+      const totalElapsedTime = Date.now() - spawnStartTime
+      console.log(`[FOLLOWER] 팔로워 스폰 완료: ${count}명 (총 소요시간: ${totalElapsedTime}ms)`)
+      console.log(`[FOLLOWER] === 팔로워 스폰 종료 ===`)
     } catch (error) {
       console.error('[FOLLOWER] 팔로워 스폰 전체 실패:', error)
     } finally {
@@ -190,20 +206,28 @@ export class NpcFollowerManager extends NpcBaseController {
   }
 
   private createFollower(x: number, y: number, size: number, id: string) {
+    const createStartTime = Date.now()
+    console.log(`[FOLLOWER] createFollower 시작: ${id} at (${x.toFixed(2)}, ${y.toFixed(2)})`)
+    
     try {
       // 화면 영역 내로 좌표 보정
       const clampedX = clamp(x, MARGIN, SCREEN_WIDTH - MARGIN)
       const clampedY = clamp(y, MARGIN, SCREEN_HEIGHT - MARGIN)
       
+      console.log(`[FOLLOWER] 좌표 보정: (${x.toFixed(2)}, ${y.toFixed(2)}) -> (${clampedX.toFixed(2)}, ${clampedY.toFixed(2)})`)
+      
       // Matter.js 바디 생성 시 예외 처리
       let body;
       try {
+        console.log(`[FOLLOWER] Matter.js 바디 생성 시작: ${id}`)
         body = createNpcBody(this.world, id, clampedX, clampedY, size / 2)
+        console.log(`[FOLLOWER] Matter.js 바디 생성 완료: ${id}`)
       } catch (bodyError) {
         console.error(`[FOLLOWER] 팔로워 바디 생성 실패: ${id}`, bodyError)
         throw bodyError
       }
 
+      console.log(`[FOLLOWER] NPC 객체 생성 시작: ${id}`)
       const npc = new Npc()
       npc.id = id
       npc.type = 'follower'
@@ -212,14 +236,27 @@ export class NpcFollowerManager extends NpcBaseController {
       npc.hp = 50
       npc.owner_id = 'server'
       npc.size = size
-      this.npcs.set(id, npc)
-      this.myNpcIds.add(id) // 생성한 NPC ID 추가
-      // 최초 방향은 임의로 (1,0) 전방
-      this.npcDirs.set(id, { x: 1, y: 0 })
       
-      if (this.isDevelopment) {
-        console.log(`[FOLLOWER] 팔로워 생성 완료: ${id} at (${clampedX}, ${clampedY})`)
-      }
+      console.log(`[FOLLOWER] MapSchema에 NPC 추가 시작: ${id}`)
+      this.npcs.set(id, npc)
+      console.log(`[FOLLOWER] MapSchema에 NPC 추가 완료: ${id}`)
+      
+      console.log(`[FOLLOWER] 내부 상태 업데이트 시작: ${id}`)
+      
+      // MapSchema 동기화 문제를 방지하기 위해 비동기 처리
+      setImmediate(() => {
+        try {
+          this.myNpcIds.add(id) // 생성한 NPC ID 추가
+          // 최초 방향은 임의로 (1,0) 전방
+          this.npcDirs.set(id, { x: 1, y: 0 })
+          console.log(`[FOLLOWER] 내부 상태 업데이트 완료: ${id}`)
+        } catch (error) {
+          console.error(`[FOLLOWER] 내부 상태 업데이트 실패: ${id}`, error)
+        }
+      })
+      
+      const createElapsedTime = Date.now() - createStartTime
+      console.log(`[FOLLOWER] 팔로워 생성 완료: ${id} at (${clampedX.toFixed(2)}, ${clampedY.toFixed(2)}) (소요시간: ${createElapsedTime}ms)`)
     } catch (error) {
       console.error(`[FOLLOWER] 팔로워 생성 실패: ${id}`, error)
       throw error
@@ -278,6 +315,12 @@ export class NpcFollowerManager extends NpcBaseController {
       leaderVelocity.x * leaderVelocity.x + leaderVelocity.y * leaderVelocity.y
     )
     const leaderAngle = Math.atan2(leaderVelocity.y, leaderVelocity.x)
+    
+    // myNpcIds 접근 시 안전성 체크
+    if (!this.myNpcIds || this.myNpcIds.size === 0) {
+      return
+    }
+    
     const followerIds = Array.from(this.myNpcIds)
 
     for (let i = 0; i < followerIds.length; i++) {

@@ -9,6 +9,7 @@ import {
   matterToDefold,
   SCREEN_HEIGHT,
   SCREEN_WIDTH,
+  defoldToMatter,
 } from './physics'
 
 export class NpcCombatManager {
@@ -19,10 +20,11 @@ export class NpcCombatManager {
 
   // 전투 설정
   private detectionRange: number = 500 // 감지 범위
-  private shootingRange: number = 500 // 사격 범위
+  private shootingRange: number = 300 // 사격 범위
   private shootCooldown: number = 1000 // 총알 쿨다운
-  private missileShootCooldown: number = 2000 // 미사일 쿨다운
-  private bulletSpeed: number = 5 // 총알 속도
+  private missileShootCooldown: number = 3000 // 미사일 쿨다운 (1000 -> 2000으로 수정, 2초에 1발)
+  private bulletSpeed: number = 5 // 총알 속도 (15 -> 5로 되돌림)
+  private missileTrackingRange: number = 200 // 미사일 추적 거리 제한
 
   // NPC별 마지막 사격 시간 추적
   private lastShootTime: Map<string, number> = new Map()
@@ -223,14 +225,18 @@ export class NpcCombatManager {
     const dirX = deltaX / distance
     const dirY = deltaY / distance
 
+    // 0방향이면 생성하지 않음
+    if (dirX === 0 && dirY === 0) return null
+
     // 미사일 시작 위치
     const startX = npc.x
     const startY = npc.y
 
-    // Matter.js 바디 생성 (Matter 좌표계)
+    // Matter.js 바디 생성 (좌표계 변환)
+    const matterPos = defoldToMatter({ x: startX, y: startY })
     const missileBody = Matter.Bodies.circle(
-      startX,
-      SCREEN_HEIGHT - startY,
+      matterPos.x,
+      matterPos.y,
       4,
       {
         label: missileId,
@@ -244,9 +250,12 @@ export class NpcCombatManager {
     )
 
     // 초기 속도 설정 (플레이어 방향으로)
+    const velocityX = dirX * this.bulletSpeed
+    const velocityY = -dirY * this.bulletSpeed // y축 반전 다시 적용 (미사일은 플레이어를 향해 쏘므로)
+    
     Matter.Body.setVelocity(missileBody, {
-      x: dirX * this.bulletSpeed,
-      y: -dirY * this.bulletSpeed,
+      x: velocityX,
+      y: velocityY,
     })
 
     Matter.World.add(this.world, missileBody)
@@ -270,8 +279,8 @@ export class NpcCombatManager {
       bulletId: missileId,
       targetPlayerId: targetPlayerId_actual,
       speed: this.bulletSpeed * 0.5,
-      turnSpeed: 0.1, // 회전 속도
-      maxTurnAngle: Math.PI / 4, // 최대 회전 각도 (10도)
+      turnSpeed: 0.1,
+      maxTurnAngle: Math.PI / 4,
     })
 
     // 쿨다운 업데이트
@@ -307,6 +316,12 @@ export class NpcCombatManager {
       const deltaX = targetPos.x - missilePos.x
       const deltaY = targetPos.y - missilePos.y
       const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY)
+
+      // 추적 거리를 벗어나면 추적 중단
+      if (distance > this.missileTrackingRange) {
+        this.homingBullets.delete(missileId)
+        continue
+      }
 
       if (distance === 0) continue
 
@@ -388,12 +403,16 @@ export class NpcCombatManager {
     const dirX = movementDirection.x
     const dirY = movementDirection.y
 
+    // 0방향이면 생성하지 않음
+    if (dirX === 0 && dirY === 0) return null
+
     // 총알 시작 위치 (NPC 앞쪽)
     const startX = npc.x
     const startY = npc.y
 
-    // Matter.js 바디 생성 (Matter 좌표계)
-    const bulletBody = Matter.Bodies.circle(startX, SCREEN_HEIGHT - startY, 3, {
+    // Matter.js 바디 생성 (좌표계 변환)
+    const matterPos = defoldToMatter({ x: startX, y: startY })
+    const bulletBody = Matter.Bodies.circle(matterPos.x, matterPos.y, 3, {
       label: bulletId,
       isSensor: true,
       frictionAir: 0,
@@ -404,9 +423,12 @@ export class NpcCombatManager {
     })
 
     // 속도 적용 (NPC 이동 방향으로)
+    const velocityX = dirX * this.bulletSpeed
+    const velocityY = dirY * this.bulletSpeed
+    
     Matter.Body.setVelocity(bulletBody, {
-      x: dirX * this.bulletSpeed,
-      y: dirY * this.bulletSpeed,
+      x: velocityX,
+      y: velocityY,
     })
 
     Matter.World.add(this.world, bulletBody)

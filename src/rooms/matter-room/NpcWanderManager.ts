@@ -26,7 +26,10 @@ export class NpcWanderManager extends NpcBaseController {
   private isDevelopment: boolean = process.env.NODE_ENV !== 'production';
   
   // 스폰 상태 추적
-  private isSpawning: boolean = false // 스폰 중인지 체크
+  private isSpawning: boolean = false
+  private spawnRetryCount: number = 0
+  private readonly MAX_SPAWN_RETRIES = 3
+  private readonly SPAWN_INTERVAL = 300 // 300ms 간격
 
   constructor(engine: Matter.Engine, npcs: MapSchema<Npc>, bullets: MapSchema<Bullet>, players: MapSchema<Player>) {
     super(engine, npcs);
@@ -82,210 +85,332 @@ export class NpcWanderManager extends NpcBaseController {
     }
   }
 
-  // 여러 그룹을 독립적으로 관리 (각 wander NPC마다 별도의 followerManager)
+  // 개선된 NPC 스폰 함수
   public spawnNpcs(count: number, size: number, followerCount?: number, followerSize?: number) {
-    // 이미 스폰 중이면 중단
-    if (this.isSpawning) {
-      if (this.isDevelopment) {
-        console.log('[WANDER] 이미 스폰 중이므로 중단')
-      }
+    const startTime = Date.now()
+    console.log(`[WANDER] === NPC 스폰 시작 ===`)
+    console.log(`[WANDER] 요청: ${count}개 리더, ${followerCount || 0}명 팔로워`)
+    console.log(`[WANDER] 현재 NPC 수: ${this.npcs.size}`)
+    
+    // 메모리 사용량 체크
+    const memUsage = process.memoryUsage()
+    const heapUsedMB = Math.round(memUsage.heapUsed / 1024 / 1024)
+    console.log(`[WANDER] 메모리 사용량: ${heapUsedMB}MB`)
+    
+    if (heapUsedMB > 200) {
+      console.warn(`[WANDER] 메모리 사용량이 높습니다: ${heapUsedMB}MB. 스폰을 건너뜁니다.`)
       return
     }
-    
-    // 스폰 상태 설정
-    this.isSpawning = true
-    
-    if (this.isDevelopment) {
-      console.log(`[WANDER] NPC 스폰 시작: ${count}개 리더, 팔로워 ${followerCount || 0}명`)
+
+    // 이미 스폰 중이면 중단
+    if (this.isSpawning) {
+      console.log('[WANDER] 이미 스폰 중이므로 중단')
+      return
     }
+
+    // 스폰 개수 제한
+    const maxSpawnCount = Math.min(count, 5)
+    console.log(`[WANDER] 실제 스폰할 개수: ${maxSpawnCount}개`)
     
-    try {
-      for (let i = 0; i < count; i++) {
-        try {
-          const leader_id = `npc_leader_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
-          const x = Math.random() * (SCREEN_WIDTH - 2 * 40) + 40;
-          const y = Math.random() * (SCREEN_HEIGHT - 2 * 40) + 40;
-          
-          // Matter.js 바디 생성 시 예외 처리
-          let npcBody;
-          try {
-            npcBody = createNpcBody(this.world, leader_id, x, y, size / 2)
-            Matter.World.add(this.world, npcBody);
-          } catch (bodyError) {
-            console.error(`[WANDER] NPC 바디 생성 실패: ${leader_id}`, bodyError)
-            continue // 이 NPC는 건너뛰고 다음으로
-          }
-          
-          const npc = new Npc();
-          npc.id = leader_id;
-          npc.type = 'leader';
-          npc.x = x;
-          npc.y = y;
-          npc.size = size;
-          npc.shape = 'circle';
-          npc.hp = 100;
-          npc.owner_id = 'server';
-          npc.power = 10;
-          npc.color = '#FFB300'; // 임의 색상
-          
-          this.npcs.set(leader_id, npc);
-          this.myNpcIds.add(leader_id); // 생성한 NPC ID 추가
-          this.npcDirs.set(leader_id, { x: 1, y: 0 });
-          this.npcTargets.set(leader_id, getRandomTargetNear(x, y, NPC_MOVE_RADIUS, { x: 1, y: 0 }));
-          
-          if (this.isDevelopment) {
-            console.log(`[WANDER] 리더 NPC 생성 완료: ${leader_id} at (${x}, ${y})`)
-          }
-          
-          // 팔로워 매니저 생성 (비동기로 처리)
-          if (followerCount && followerSize) {
-            setTimeout(() => {
-              try {
-                const followerManager = new NpcFollowerManager(
-                  this.engine,
-                  this.npcs,
-                  leader_id,
-                  'v',
-                  this.statePlayers,
-                  this.bullets
-                );
-                
-                // WanderManager 참조 설정
-                followerManager.setWanderManager(this);
-                
-                // MatterRoom 참조 설정
-                if (this.matterRoom) {
-                  followerManager.setMatterRoom(this.matterRoom);
-                }
-                
-                // 팔로워 스폰
-                followerManager.spawnFollowers(followerCount, followerSize);
-                followerManager.enableCombat();
-                this.followerManagers.push(followerManager);
-                
-                if (this.isDevelopment) {
-                  console.log(`[WANDER] 팔로워 매니저 생성 완료: ${leader_id}의 ${followerCount}명 팔로워`)
-                }
-              } catch (followerError) {
-                console.error(`[WANDER] 팔로워 매니저 생성 실패: ${leader_id}`, followerError)
-              }
-            }, i * 50) // 각 리더마다 50ms씩 지연하여 부하 분산
-          }
-          
-        } catch (npcError) {
-          console.error(`[WANDER] NPC ${i}번째 생성 실패:`, npcError)
-          continue // 이 NPC는 건너뛰고 다음으로
-        }
-      }
-      
-      if (this.isDevelopment) {
-        console.log(`[WANDER] NPC 스폰 완료: ${count}개 리더 생성됨`)
-      }
-      
-    } catch (error) {
-      console.error('[WANDER] NPC 스폰 전체 실패:', error)
-    } finally {
-      // 스폰 완료 후 상태 해제
+    this.isSpawning = true
+    this.spawnRetryCount = 0
+
+    console.log(`[WANDER] NPC 스폰 시작: ${maxSpawnCount}개 리더, 팔로워 ${followerCount || 0}명`)
+
+    // 단계별 스폰 처리
+    this.spawnNpcsSequentially(maxSpawnCount, size, 0, followerCount, followerSize, startTime)
+  }
+
+  // 순차적 스폰 처리
+  private spawnNpcsSequentially(
+    totalCount: number, 
+    size: number, 
+    currentIndex: number,
+    followerCount?: number, 
+    followerSize?: number,
+    startTime?: number
+  ) {
+    console.log(`[WANDER] 순차 스폰 진행: ${currentIndex + 1}/${totalCount}`)
+    
+    if (currentIndex >= totalCount) {
       this.isSpawning = false
+      const elapsedTime = startTime ? Date.now() - startTime : 0
+      console.log(`[WANDER] NPC 스폰 완료: ${totalCount}개 리더 생성됨 (소요시간: ${elapsedTime}ms)`)
+      console.log(`[WANDER] === NPC 스폰 종료 ===`)
+      return
+    }
+
+    try {
+      console.log(`[WANDER] ${currentIndex + 1}번째 NPC 생성 시작`)
+      this.spawnSingleNpc(size, followerCount, followerSize)
+      console.log(`[WANDER] ${currentIndex + 1}번째 NPC 생성 완료`)
+    } catch (error) {
+      console.error(`[WANDER] NPC ${currentIndex + 1}번째 생성 실패:`, error)
+      this.spawnRetryCount++
+      
+      if (this.spawnRetryCount < this.MAX_SPAWN_RETRIES) {
+        console.log(`[WANDER] 재시도 ${this.spawnRetryCount}/${this.MAX_SPAWN_RETRIES}`)
+      }
+    }
+
+    // 다음 NPC 스폰 예약
+    console.log(`[WANDER] ${this.SPAWN_INTERVAL}ms 후 다음 NPC 스폰 예약`)
+    setTimeout(() => {
+      this.spawnNpcsSequentially(totalCount, size, currentIndex + 1, followerCount, followerSize, startTime)
+    }, this.SPAWN_INTERVAL)
+  }
+
+  // 단일 NPC 스폰 (개선된 버전)
+  private spawnSingleNpc(size: number, followerCount?: number, followerSize?: number) {
+    const spawnStartTime = Date.now()
+    const leader_id = `npc_leader_${Date.now()}_${Math.floor(Math.random() * 10000)}`
+    const x = Math.random() * (SCREEN_WIDTH - 2 * 40) + 40
+    const y = Math.random() * (SCREEN_HEIGHT - 2 * 40) + 40
+
+    console.log(`[WANDER] 단일 NPC 생성 시작: ${leader_id} at (${x.toFixed(2)}, ${y.toFixed(2)})`)
+
+    // Matter.js 바디 생성 시 예외 처리 강화
+    let npcBody
+    try {
+      console.log(`[WANDER] Matter.js 바디 생성 시작: ${leader_id}`)
+      npcBody = createNpcBody(this.world, leader_id, x, y, size / 2)
+      if (!npcBody) {
+        throw new Error('NPC 바디 생성 실패')
+      }
+      console.log(`[WANDER] Matter.js 바디 생성 완료: ${leader_id}`)
+      
+      console.log(`[WANDER] World에 바디 추가 시작: ${leader_id}`)
+      Matter.World.add(this.world, npcBody)
+      console.log(`[WANDER] World에 바디 추가 완료: ${leader_id}`)
+    } catch (bodyError) {
+      console.error(`[WANDER] NPC 바디 생성 실패: ${leader_id}`, bodyError)
+      throw bodyError
+    }
+
+    // NPC 객체 생성
+    console.log(`[WANDER] NPC 객체 생성 시작: ${leader_id}`)
+    const npc = new Npc()
+    npc.id = leader_id
+    npc.type = 'leader'
+    npc.x = x
+    npc.y = y
+    npc.size = size
+    npc.shape = 'circle'
+    npc.hp = 100
+    npc.owner_id = 'server'
+    npc.power = 10
+    npc.color = '#FFB300'
+
+    console.log(`[WANDER] NPC 객체 속성 설정 완료: ${leader_id}`)
+
+    // MapSchema에 NPC 추가
+    console.log(`[WANDER] MapSchema에 NPC 추가 시작: ${leader_id}`)
+    
+    // MapSchema 동기화 문제를 방지하기 위해 비동기 처리
+    setImmediate(() => {
+      try {
+        this.npcs.set(leader_id, npc)
+        console.log(`[WANDER] MapSchema에 NPC 추가 완료: ${leader_id}`)
+      } catch (error) {
+        console.error(`[WANDER] MapSchema 추가 실패: ${leader_id}`, error)
+      }
+    })
+
+    // 내부 상태 업데이트
+    console.log(`[WANDER] 내부 상태 업데이트 시작: ${leader_id}`)
+    
+    // MapSchema 동기화 문제를 방지하기 위해 비동기 처리
+    setImmediate(() => {
+      try {
+        this.myNpcIds.add(leader_id)
+        this.npcDirs.set(leader_id, { x: 1, y: 0 })
+        this.npcTargets.set(leader_id, getRandomTargetNear(x, y, NPC_MOVE_RADIUS, { x: 1, y: 0 }))
+        console.log(`[WANDER] 내부 상태 업데이트 완료: ${leader_id}`)
+      } catch (error) {
+        console.error(`[WANDER] 내부 상태 업데이트 실패: ${leader_id}`, error)
+      }
+    })
+
+    const spawnElapsedTime = Date.now() - spawnStartTime
+    console.log(`[WANDER] 리더 NPC 생성 완료: ${leader_id} at (${x.toFixed(2)}, ${y.toFixed(2)}) (소요시간: ${spawnElapsedTime}ms)`)
+
+    // 팔로워는 별도 처리
+    if (followerCount && followerSize) {
+      console.log(`[WANDER] 팔로워 스폰 예약: ${leader_id}의 ${followerCount}명 팔로워`)
+      this.spawnFollowersForLeader(leader_id, followerCount, followerSize)
     }
   }
+
+  // 팔로워 스폰 (개선된 버전)
+  private spawnFollowersForLeader(leaderId: string, followerCount: number, followerSize: number) {
+    console.log(`[WANDER] 팔로워 스폰 시작: ${leaderId}의 ${followerCount}명 팔로워`)
+    const followerStartTime = Date.now()
+    
+    setImmediate(() => {
+      try {
+        console.log(`[WANDER] NpcFollowerManager 생성 시작: ${leaderId}`)
+        const followerManager = new NpcFollowerManager(
+          this.engine,
+          this.npcs,
+          leaderId,
+          'v',
+          this.statePlayers,
+          this.bullets
+        )
+        console.log(`[WANDER] NpcFollowerManager 생성 완료: ${leaderId}`)
+
+        console.log(`[WANDER] WanderManager 설정: ${leaderId}`)
+        followerManager.setWanderManager(this)
+        
+        if (this.matterRoom) {
+          console.log(`[WANDER] MatterRoom 설정: ${leaderId}`)
+          followerManager.setMatterRoom(this.matterRoom)
+        }
+
+        // 팔로워 스폰을 지연시켜 부하 분산
+        console.log(`[WANDER] 팔로워 스폰 100ms 지연 예약: ${leaderId}`)
+        setTimeout(() => {
+          try {
+            console.log(`[WANDER] 팔로워 스폰 실행 시작: ${leaderId}`)
+            followerManager.spawnFollowers(followerCount, followerSize)
+            console.log(`[WANDER] 팔로워 스폰 실행 완료: ${leaderId}`)
+            
+            console.log(`[WANDER] 전투 활성화: ${leaderId}`)
+            followerManager.enableCombat()
+            
+            console.log(`[WANDER] 팔로워 매니저 배열에 추가: ${leaderId}`)
+            this.followerManagers.push(followerManager)
+            
+            const followerElapsedTime = Date.now() - followerStartTime
+            console.log(`[WANDER] 팔로워 매니저 생성 완료: ${leaderId}의 ${followerCount}명 팔로워 (소요시간: ${followerElapsedTime}ms)`)
+          } catch (followerError) {
+            console.error(`[WANDER] 팔로워 스폰 실패: ${leaderId}`, followerError)
+          }
+        }, 100)
+
+      } catch (followerError) {
+        console.error(`[WANDER] 팔로워 매니저 생성 실패: ${leaderId}`, followerError)
+      }
+    })
+  }
+
   // 모든 NPC 이동
   public moveAllNpcs(deltaTime: number) {
-    for (const id of this.myNpcIds) {
-      const npc = this.npcs.get(id);
-      if (!npc) continue;
-      const npcBody = this.world.bodies.find((b) => b.label === id);
-      if (!npcBody) continue;
-      let target = this.npcTargets.get(id);
-      let dir = this.npcDirs.get(id) || { x: 1, y: 0 };
-
-      const detectedPlayer = this.combatManager?.detectPlayerInMovementDirection(id);
-      if (detectedPlayer && detectedPlayer.distance <= 400) {
-        for (const fm of this.followerManagers) {
-          if (fm.leaderId === id && !fm.temporaryTargetActive) {
-            fm.temporaryTargetPlayerId = detectedPlayer.playerId;
-            fm.temporaryTargetActive = true;
-            fm.temporaryTargetActivatedAt = Date.now();
-            fm.returningToFormation = false;
-            fm.enableCombat()
-          }
-        }
-      }
-
-      if (detectObstacles(this.world, npcBody, dir, this.statePlayers)) {
-        const newDir = calculateAvoidanceDirection(dir);
-        const angleDiff = Math.abs(Math.atan2(newDir.y, newDir.x) - Math.atan2(dir.y, dir.x));
-        if (angleDiff < Math.PI / 2) {
-          dir = newDir;
-          this.npcDirs.set(id, dir);
-          // 벽 근처라면 맵 중앙 쪽으로 목표 강제 이동
-          const MARGIN = 80;
-          if (npcBody.position.x < MARGIN*1.5 || npcBody.position.x > SCREEN_WIDTH - MARGIN*1.5 ||
-              npcBody.position.y < MARGIN*1.5 || npcBody.position.y > SCREEN_HEIGHT - MARGIN*1.5) {
-            target = { x: SCREEN_WIDTH/2, y: SCREEN_HEIGHT/2 };
-            this.npcTargets.set(id, target);
-          } else {
-            target = getRandomTargetNear(npcBody.position.x, npcBody.position.y, NPC_MOVE_RADIUS, dir);
-            this.npcTargets.set(id, target);
-          }
-        }
-      }
-      if (!target) {
-        target = getRandomTargetNear(npcBody.position.x, npcBody.position.y, NPC_MOVE_RADIUS, dir);
-        this.npcTargets.set(id, target);
-      }
-      const dx = target.x - npcBody.position.x;
-      const dy = target.y - npcBody.position.y;
-      const dist = Math.sqrt(dx * dx + dy * dy);
-      if (dist < 10) {
-        const curDir = dist > 0.01 ? { x: dx / dist, y: dy / dist } : dir;
-        this.npcDirs.set(id, curDir);
-        const newTarget = getRandomTargetNear(npcBody.position.x, npcBody.position.y, NPC_MOVE_RADIUS, curDir);
-        this.npcTargets.set(id, newTarget);
-        continue;
-      }
-
-      if (id.includes('follower')) {
-        this.moveNpcToTarget(id, target, { speed: NPC_SPEED*2 });
-      } else {
-        this.moveNpcToTarget(id, target, { speed: NPC_SPEED });
+    try {
+      // isActive 대신 적절한 조건으로 활성 바디 필터링
+      const activeBodies = this.world.bodies.filter(b => 
+        b.label && !b.isStatic && b.label.startsWith('npc_')
+      )
+      
+      // myNpcIds 접근 시 안전성 체크
+      if (!this.myNpcIds || this.myNpcIds.size === 0) {
+        return
       }
       
-      const dx2 = target.x - npcBody.position.x;
-      const dy2 = target.y - npcBody.position.y;
-      const dist2 = Math.sqrt(dx2 * dx2 + dy2 * dy2);
-      this.npcDirs.set(id, { x: dx2 / (dist2 || 1), y: dy2 / (dist2 || 1) });
-    }
-    for (const fm of this.followerManagers) {
-      let shouldReturn = false;
-      if (fm.temporaryTargetActive && fm.temporaryTargetActivatedAt) {
-        if (Date.now() - fm.temporaryTargetActivatedAt > NPC_RETURN_TO_FORMATION_TIME) {
-          shouldReturn = true;
-        }
-        if (fm.temporaryTargetPlayerId && this.statePlayers) {
-          const player = this.statePlayers.get(fm.temporaryTargetPlayerId);
-          const leaderBody = this.world.bodies.find((b) => b.label === fm.leaderId);
-          if (player && leaderBody) {
-            const dx = player.x - leaderBody.position.x;
-            const dy = (SCREEN_HEIGHT - player.y) - leaderBody.position.y;
-            if (Math.sqrt(dx * dx + dy * dy) > NPC_RETURN_TO_FORMATION_DISTANCE) {
-              shouldReturn = true;
+      // 전투 AI 업데이트 추가 - NPC들이 총알과 미사일을 발사하도록 함
+      if (this.combatManager) {
+        const npcIds = Array.from(this.myNpcIds)
+        this.combatManager.updateCombatAI(deltaTime, npcIds)
+      }
+      
+      for (const id of this.myNpcIds) {
+        const npc = this.npcs.get(id);
+        if (!npc) continue;
+        const npcBody = activeBodies.find((b) => b.label === id);
+        if (!npcBody) continue;
+        let target = this.npcTargets.get(id);
+        let dir = this.npcDirs.get(id) || { x: 1, y: 0 };
+
+        const detectedPlayer = this.combatManager?.detectPlayerInMovementDirection(id);
+        if (detectedPlayer && detectedPlayer.distance <= 400) {
+          for (const fm of this.followerManagers) {
+            if (fm.leaderId === id && !fm.temporaryTargetActive) {
+              fm.temporaryTargetPlayerId = detectedPlayer.playerId;
+              fm.temporaryTargetActive = true;
+              fm.temporaryTargetActivatedAt = Date.now();
+              fm.returningToFormation = false;
+              fm.enableCombat()
             }
           }
         }
+
+        if (detectObstacles(this.world, npcBody, dir, this.statePlayers)) {
+          const newDir = calculateAvoidanceDirection(dir);
+          const angleDiff = Math.abs(Math.atan2(newDir.y, newDir.x) - Math.atan2(dir.y, dir.x));
+          if (angleDiff < Math.PI / 2) {
+            dir = newDir;
+            this.npcDirs.set(id, dir);
+            // 벽 근처라면 맵 중앙 쪽으로 목표 강제 이동
+            const MARGIN = 80;
+            if (npcBody.position.x < MARGIN*1.5 || npcBody.position.x > SCREEN_WIDTH - MARGIN*1.5 ||
+                npcBody.position.y < MARGIN*1.5 || npcBody.position.y > SCREEN_HEIGHT - MARGIN*1.5) {
+              target = { x: SCREEN_WIDTH/2, y: SCREEN_HEIGHT/2 };
+              this.npcTargets.set(id, target);
+            } else {
+              target = getRandomTargetNear(npcBody.position.x, npcBody.position.y, NPC_MOVE_RADIUS, dir);
+              this.npcTargets.set(id, target);
+            }
+          }
+        }
+        if (!target) {
+          target = getRandomTargetNear(npcBody.position.x, npcBody.position.y, NPC_MOVE_RADIUS, dir);
+          this.npcTargets.set(id, target);
+        }
+        const dx = target.x - npcBody.position.x;
+        const dy = target.y - npcBody.position.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist < 10) {
+          const curDir = dist > 0.01 ? { x: dx / dist, y: dy / dist } : dir;
+          this.npcDirs.set(id, curDir);
+          const newTarget = getRandomTargetNear(npcBody.position.x, npcBody.position.y, NPC_MOVE_RADIUS, curDir);
+          this.npcTargets.set(id, newTarget);
+          continue;
+        }
+
+        if (id.includes('follower')) {
+          this.moveNpcToTarget(id, target, { speed: NPC_SPEED*2 });
+        } else {
+          this.moveNpcToTarget(id, target, { speed: NPC_SPEED });
+        }
+        
+        const dx2 = target.x - npcBody.position.x;
+        const dy2 = target.y - npcBody.position.y;
+        const dist2 = Math.sqrt(dx2 * dx2 + dy2 * dy2);
+        this.npcDirs.set(id, { x: dx2 / (dist2 || 1), y: dy2 / (dist2 || 1) });
       }
-      if (shouldReturn) {
-        fm.temporaryTargetActive = false;
-        fm.returningToFormation = true;
-        fm.temporaryTargetActivatedAt = null;
-        fm.temporaryTargetPlayerId = null;
-        fm.disableCombat()
+      for (const fm of this.followerManagers) {
+        let shouldReturn = false;
+        if (fm.temporaryTargetActive && fm.temporaryTargetActivatedAt) {
+          if (Date.now() - fm.temporaryTargetActivatedAt > NPC_RETURN_TO_FORMATION_TIME) {
+            shouldReturn = true;
+          }
+          if (fm.temporaryTargetPlayerId && this.statePlayers) {
+            const player = this.statePlayers.get(fm.temporaryTargetPlayerId);
+            const leaderBody = activeBodies.find((b) => b.label === fm.leaderId);
+            if (player && leaderBody) {
+              const dx = player.x - leaderBody.position.x;
+              const dy = (SCREEN_HEIGHT - player.y) - leaderBody.position.y;
+              if (Math.sqrt(dx * dx + dy * dy) > NPC_RETURN_TO_FORMATION_DISTANCE) {
+                shouldReturn = true;
+              }
+            }
+          }
+        }
+        if (shouldReturn) {
+          fm.temporaryTargetActive = false;
+          fm.returningToFormation = true;
+          fm.temporaryTargetActivatedAt = null;
+          fm.temporaryTargetPlayerId = null;
+          fm.disableCombat()
+        }
+        fm.moveAllFollowers(deltaTime);
       }
-      fm.moveAllFollowers(deltaTime);
+      
+      // 정리된 팔로워 매니저들을 배열에서 제거
+      this.followerManagers = this.followerManagers.filter(fm => !fm.getIsCleanedUp());
+    } catch (error) {
+      console.error('[WANDER] moveAllNpcs 에러:', error)
     }
-    
-    // 정리된 팔로워 매니저들을 배열에서 제거
-    this.followerManagers = this.followerManagers.filter(fm => !fm.getIsCleanedUp());
   }
 
   // NPC 제거 시 관련 데이터 정리
@@ -345,5 +470,56 @@ export class NpcWanderManager extends NpcBaseController {
       console.log(`[WANDER] NPC 완전 정리 완료: ${npcId}`)
       console.log(`[WANDER] 현재 월드 바디 수: ${this.world.bodies.length}`)
     }
+  }
+
+  // 명시적 정리
+  private cleanupTimers() {
+    // 모든 팔로워 매니저의 타이머 정리
+    this.followerManagers.forEach(fm => {
+      if (fm.cleanup) {
+        fm.cleanup()
+      }
+    })
+    
+    // 내부 타이머 정리
+    this.followerManagers = []
+    this.myNpcIds.clear()
+    this.npcTargets.clear()
+    this.npcDirs.clear()
+    
+    console.log('[WANDER] 모든 타이머 정리 완료')
+  }
+
+  // NPC 스폰 최적화
+  private async spawnNpcsOptimized(count: number) {
+    // 배치 처리로 메모리 효율성 향상
+    const batchSize = 3
+    for (let i = 0; i < count; i += batchSize) {
+      await this.spawnBatch(Math.min(batchSize, count - i))
+      await new Promise(resolve => setTimeout(resolve, 50)) // 지연으로 부하 분산
+    }
+  }
+
+  // 물리 엔진 최적화
+  private optimizePhysics() {
+    // isActive 대신 적절한 조건으로 불필요한 바디 제거
+    this.world.bodies = this.world.bodies.filter(body => 
+      body.label && !body.isStatic && body.label.startsWith('npc_')
+    )
+  }
+
+  private async spawnBatch(count: number) {
+    for (let i = 0; i < count; i++) {
+      try {
+        this.spawnSingleNpc(25, 3, 15)
+        await new Promise(resolve => setTimeout(resolve, 10))
+      } catch (error) {
+        console.error(`[WANDER] 배치 스폰 실패: ${i}번째`, error)
+      }
+    }
+  }
+
+  public getCombatManager() {
+    return this.combatManager
   }
 }

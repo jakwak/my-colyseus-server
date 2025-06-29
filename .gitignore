@@ -3,3 +3,4 @@ build
 .colyseus-cloud.json
 .devmode.json
 /.defold/api
+logs
