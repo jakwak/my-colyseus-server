@@ -12,10 +12,15 @@ module.exports = {
       watch: false,
       max_memory_restart: '400M',
       min_uptime: '15s',
-      max_restarts: 3,
+      max_restarts: 5,
       restart_delay: 8000,
       kill_timeout: 15000,
       listen_timeout: 20000,
+      exp_backoff_restart_delay: 100,
+      health_check_grace_period: 3000,
+      health_check_fatal_exceptions: true,
+      max_memory_restart: '300M',
+      node_args: '--max-old-space-size=400 --expose-gc',
       env: { 
         NODE_ENV: 'development', 
         PORT: 2567,
@@ -30,8 +35,7 @@ module.exports = {
       log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
       merge_logs: false,
       log_type: 'text',
-      disable_source_map_support: true,
-      node_args: '--max-old-space-size=400'
+      disable_source_map_support: true
     },
     {
       name: 'svkit-1',

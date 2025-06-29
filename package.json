@@ -15,7 +15,17 @@
     "loadtest": "tsx loadtest/example.ts --room my_room --numClients 2",
     "build": "npm run clean && tsc",
     "clean": "rimraf build",
-    "test": "mocha -r tsx test/**_test.ts --exit --timeout 15000"
+    "test": "mocha -r tsx test/**_test.ts --exit --timeout 15000",
+    "monitor": "node remote-monitor.js",
+    "monitor:restart": "node remote-monitor.js --restart",
+    "monitor:status": "node remote-monitor.js --status",
+    "remote:status": "./remote-control.sh status",
+    "remote:start": "./remote-control.sh start",
+    "remote:restart": "./remote-control.sh restart",
+    "remote:stop": "./remote-control.sh stop",
+    "remote:logs": "./remote-control.sh logs",
+    "remote:monitor": "./remote-control.sh monitor",
+    "remote:auto": "./remote-control.sh auto"
   },
   "author": "",
   "license": "UNLICENSED",
