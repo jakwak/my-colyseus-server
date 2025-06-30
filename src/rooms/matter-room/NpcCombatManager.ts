@@ -24,7 +24,7 @@ export class NpcCombatManager {
   private shootCooldown: number = 1000 // 총알 쿨다운
   private missileShootCooldown: number = 3000 // 미사일 쿨다운 (1000 -> 2000으로 수정, 2초에 1발)
   private bulletSpeed: number = 5 // 총알 속도 (15 -> 5로 되돌림)
-  private missileTrackingRange: number = 200 // 미사일 추적 거리 제한
+  private missileTrackingRange: number = 300 // 미사일 추적 거리 제한
 
   // NPC별 마지막 사격 시간 추적
   private lastShootTime: Map<string, number> = new Map()

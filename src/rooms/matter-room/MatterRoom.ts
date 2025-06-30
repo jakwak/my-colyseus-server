@@ -25,7 +25,12 @@ export class MatterRoom extends Room<State> {
 
   // NPC 스폰 관련 개선된 속성들
   private isSpawningNpcs: boolean = false
-  private spawnQueue: Array<{count: number, size: number, followerCount?: number, followerSize?: number}> = []
+  private spawnQueue: Array<{
+    count: number
+    size: number
+    followerCount?: number
+    followerSize?: number
+  }> = []
   private lastSpawnTime: number = 0
   private readonly SPAWN_COOLDOWN = 2000 // 2초 쿨다운
   private readonly MAX_NPCS = 30 // 최대 NPC 수 제한 (10 -> 30으로 증가)
@@ -52,7 +57,7 @@ export class MatterRoom extends Room<State> {
 
   onCreate() {
     console.log(`방 ${this.roomId} 생성됨`)
-    
+
     // 방 초기화 수행
     this.initializeRoom()
   }
@@ -85,59 +90,7 @@ export class MatterRoom extends Room<State> {
         this.state.players
       )
 
-      // 물리 업데이트 루프 시작 (30fps로 조정)
-      this.setSimulationInterval((deltaTime) => {
-        const startTime = Date.now()
-
-        try {
-          Matter.Engine.update(this.engine, deltaTime)
-
-          this.playerController?.updateAndCleanupBullets()
-          this.npcWanderManager?.moveAllNpcs(deltaTime)
-          this.starManager?.cleanupOldStars()
-
-          // NPC 총알/미사일 위치 동기화 및 삭제
-          this.npcWanderManager?.getCombatManager()?.syncAndCleanupNpcBullets(this.state.npcBullets)
-
-          // 자동 NPC 스폰 (NPC 개수가 5개 이하일 때)
-          this.checkAndAutoSpawnNpcs()
-
-          if (this.npcWanderManager?.followerManagers && !this.isSpawningNpcs) {
-            for (const fm of this.npcWanderManager.followerManagers) {
-              const combatManager = fm.getCombatManager && fm.getCombatManager()
-              combatManager?.syncAndCleanupNpcBullets(this.state.npcBullets)
-            }
-          }
-
-          // 성능 측정
-          this.performanceMetrics.frameCount++
-          const frameTime = Date.now() - startTime
-          this.performanceMetrics.averageFrameTime =
-            this.performanceMetrics.averageFrameTime * 0.9 + frameTime * 0.1
-
-          // 1초마다 FPS 체크
-          if (Date.now() - this.performanceMetrics.lastFpsCheck > 1000) {
-            const fps = this.performanceMetrics.frameCount
-            if (this.isDevelopment) {
-              console.log(
-                `FPS: ${fps}, 평균 프레임 시간: ${this.performanceMetrics.averageFrameTime.toFixed(
-                  2
-                )}ms`
-              )
-            }
-
-            if (fps < 20) {
-              console.warn('FPS가 낮습니다! 성능 최적화가 필요합니다.')
-            }
-
-            this.performanceMetrics.frameCount = 0
-            this.performanceMetrics.lastFpsCheck = Date.now()
-          }
-        } catch (error) {
-          console.error('시뮬레이션 루프 에러:', error)
-          this.handleSimulationError(error)
-        }
-      }, 1000 / 60) // 60fps로 조정
+      this.setSimulationInterval((deltaTime) => this.update(deltaTime))
 
       // 메시지 핸들러 등록
       this.setupMessageHandlers()
@@ -153,6 +106,61 @@ export class MatterRoom extends Room<State> {
     } catch (error) {
       console.error(`[ROOM_POOL] 방 ${this.roomId} 초기화 에러:`, error)
       throw error
+    }
+  }
+
+  private update(deltaTime: number) {
+    const startTime = Date.now()
+
+    try {
+      Matter.Engine.update(this.engine, deltaTime)
+
+      this.playerController?.updateAndCleanupBullets()
+      this.npcWanderManager?.moveAllNpcs(deltaTime)
+      this.starManager?.cleanupOldStars()
+
+      // NPC 총알/미사일 위치 동기화 및 삭제
+      this.npcWanderManager
+        ?.getCombatManager()
+        ?.syncAndCleanupNpcBullets(this.state.npcBullets)
+
+      // 자동 NPC 스폰 (NPC 개수가 5개 이하일 때)
+      this.checkAndAutoSpawnNpcs()
+
+      if (this.npcWanderManager?.followerManagers && !this.isSpawningNpcs) {
+        for (const fm of this.npcWanderManager.followerManagers) {
+          const combatManager = fm.getCombatManager && fm.getCombatManager()
+          combatManager?.syncAndCleanupNpcBullets(this.state.npcBullets)
+        }
+      }
+
+      // 성능 측정
+      this.performanceMetrics.frameCount++
+      const frameTime = Date.now() - startTime
+      this.performanceMetrics.averageFrameTime =
+        this.performanceMetrics.averageFrameTime * 0.9 + frameTime * 0.1
+
+      // 1초마다 FPS 체크
+      if (Date.now() - this.performanceMetrics.lastFpsCheck > 1000) {
+        const fps = this.performanceMetrics.frameCount
+        if (this.isDevelopment) {
+          console.log(
+            `FPS: ${fps}, 평균 프레임 시간: ${this.performanceMetrics.averageFrameTime.toFixed(
+              2
+            )}ms`
+          )
+        }
+
+        if (fps < 20) {
+          console.warn('FPS가 낮습니다! 성능 최적화가 필요합니다.')
+        }
+
+        this.performanceMetrics.frameCount = 0
+        this.performanceMetrics.lastFpsCheck = Date.now()
+      }
+    } catch (error) {
+      console.error('시뮬레이션 루프 에러:', error)
+      this.handleSimulationError(error)
     }
   }
 
@@ -308,12 +316,12 @@ export class MatterRoom extends Room<State> {
 
       // 플레이어 생성 및 초기화
       this.playerController.createPlayer(client, options)
-      
+
       console.log(`플레이어 ${client.sessionId} 생성 완료 (방: ${this.roomId})`)
-      
+
       // 기존 NPC 정리 (새로운 플레이어를 위한 공간 확보)
       this.cleanupExistingNpcs()
-      
+
       // NPC 스폰 시작
       this.startNpcSpawning()
     } catch (error) {
@@ -327,13 +335,13 @@ export class MatterRoom extends Room<State> {
     try {
       const currentNpcCount = this.state.npcs.size
       console.log(`[CLEANUP] 기존 NPC 정리 시작: ${currentNpcCount}개`)
-      
+
       if (currentNpcCount > 0) {
         // 모든 NPC ID 수집
         const npcIds = Array.from(this.state.npcs.keys())
-        
+
         // NPC 제거 (안전하게)
-        npcIds.forEach(npcId => {
+        npcIds.forEach((npcId) => {
           try {
             if (this.npcWanderManager) {
               this.npcWanderManager.removeNpcWithCleanup(npcId)
@@ -342,7 +350,7 @@ export class MatterRoom extends Room<State> {
             console.error(`[CLEANUP] NPC ${npcId} 제거 실패:`, error)
           }
         })
-        
+
         console.log(`[CLEANUP] 기존 NPC 정리 완료: ${npcIds.length}개 제거`)
       }
     } catch (error) {
@@ -380,16 +388,18 @@ export class MatterRoom extends Room<State> {
   onLeave(client: Client) {
     try {
       console.log(`플레이어 ${client.sessionId} 퇴장`)
-      
+
       // playerController가 null인 경우 처리
       if (!this.playerController) {
-        console.warn(`playerController가 null입니다. 방 ${this.roomId}에서 플레이어 ${client.sessionId} 퇴장 처리 생략`)
+        console.warn(
+          `playerController가 null입니다. 방 ${this.roomId}에서 플레이어 ${client.sessionId} 퇴장 처리 생략`
+        )
         return
       }
 
       this.playerController.removePlayerFromGame(client.sessionId)
       console.log(`플레이어 ${client.sessionId} 퇴장 완료`)
-      
+
       // 플레이어 제거 후 남은 플레이어 수 체크 (즉시 체크)
       if (this.state.players.size === 0) {
         console.log(`모든 플레이어가 퇴장하여 방 ${this.roomId} 삭제 시작`)
@@ -441,7 +451,7 @@ export class MatterRoom extends Room<State> {
   // 방이 완전히 종료될 때 호출
   onDispose() {
     console.log(`방 ${this.roomId} 종료 시작`)
-    
+
     try {
       // NPC 매니저 정리
       if (this.npcWanderManager) {
@@ -465,16 +475,16 @@ export class MatterRoom extends Room<State> {
       try {
         const playerBulletIds = Array.from(this.state.playerBullets.keys())
         const npcBulletIds = Array.from(this.state.npcBullets.keys())
-        
-        playerBulletIds.forEach(bulletId => {
+
+        playerBulletIds.forEach((bulletId) => {
           try {
             this.removeBullet(bulletId)
           } catch (error) {
             console.error(`플레이어 총알 제거 실패: ${bulletId}`, error)
           }
         })
-        
-        npcBulletIds.forEach(bulletId => {
+
+        npcBulletIds.forEach((bulletId) => {
           try {
             this.removeBullet(bulletId)
           } catch (error) {
@@ -489,7 +499,7 @@ export class MatterRoom extends Room<State> {
       console.log(`방 ${this.roomId} NPC 정리`)
       try {
         const npcIds = Array.from(this.state.npcs.keys())
-        npcIds.forEach(npcId => {
+        npcIds.forEach((npcId) => {
           try {
             this.removeNpc(npcId)
           } catch (error) {
@@ -602,23 +612,28 @@ export class MatterRoom extends Room<State> {
     console.log(`[MATTER_ROOM] === NPC 스폰 요청 처리 시작 ===`)
     console.log(`[MATTER_ROOM] 클라이언트: ${client.sessionId}`)
     console.log(`[MATTER_ROOM] 요청 데이터:`, data)
-    
+
     try {
       const currentTime = Date.now()
-      
+
       // 쿨다운 체크
       if (currentTime - this.lastSpawnTime < this.SPAWN_COOLDOWN) {
-        const remainingTime = this.SPAWN_COOLDOWN - (currentTime - this.lastSpawnTime)
+        const remainingTime =
+          this.SPAWN_COOLDOWN - (currentTime - this.lastSpawnTime)
         console.log(`[MATTER_ROOM] 스폰 쿨다운 중... (${remainingTime}ms 남음)`)
         return
       }
 
       // 현재 NPC 수 체크
       const currentNpcCount = this.state.npcs.size
-      console.log(`[MATTER_ROOM] 현재 NPC 수: ${currentNpcCount}/${this.MAX_NPCS}`)
-      
+      console.log(
+        `[MATTER_ROOM] 현재 NPC 수: ${currentNpcCount}/${this.MAX_NPCS}`
+      )
+
       if (currentNpcCount >= this.MAX_NPCS) {
-        console.log(`[MATTER_ROOM] NPC 수가 최대치(${this.MAX_NPCS})에 도달했습니다.`)
+        console.log(
+          `[MATTER_ROOM] NPC 수가 최대치(${this.MAX_NPCS})에 도달했습니다.`
+        )
         return
       }
 
@@ -629,7 +644,7 @@ export class MatterRoom extends Room<State> {
           count: Math.min(data.count || 2, this.MAX_SPAWN_PER_REQUEST),
           size: data.size || 25,
           followerCount: data.followerCount || 3,
-          followerSize: data.followerSize || 15
+          followerSize: data.followerSize || 15,
         }
         this.spawnQueue.push(queueData)
         console.log(`[MATTER_ROOM] 큐에 추가됨:`, queueData)
@@ -641,9 +656,11 @@ export class MatterRoom extends Room<State> {
       const memUsage = process.memoryUsage()
       const heapUsedMB = Math.round(memUsage.heapUsed / 1024 / 1024)
       console.log(`[MATTER_ROOM] 메모리 사용량: ${heapUsedMB}MB`)
-      
+
       if (heapUsedMB > 150) {
-        console.warn(`[MATTER_ROOM] 메모리 사용량이 높습니다: ${heapUsedMB}MB. 스폰을 건너뜁니다.`)
+        console.warn(
+          `[MATTER_ROOM] 메모리 사용량이 높습니다: ${heapUsedMB}MB. 스폰을 건너뜁니다.`
+        )
         return
       }
 
@@ -651,31 +668,39 @@ export class MatterRoom extends Room<State> {
         count: Math.min(data.count || 2, this.MAX_SPAWN_PER_REQUEST),
         size: data.size || 25,
         followerCount: data.followerCount || 3,
-        followerSize: data.followerSize || 15
+        followerSize: data.followerSize || 15,
       }
-      
+
       console.log(`[MATTER_ROOM] 스폰 데이터 준비 완료:`, spawnData)
       this.processSpawnRequest(spawnData)
-
     } catch (error) {
       console.error('[MATTER_ROOM] spawn_npc 요청 처리 에러:', error)
     } finally {
       const requestElapsedTime = Date.now() - requestStartTime
-      console.log(`[MATTER_ROOM] NPC 스폰 요청 처리 완료 (소요시간: ${requestElapsedTime}ms)`)
+      console.log(
+        `[MATTER_ROOM] NPC 스폰 요청 처리 완료 (소요시간: ${requestElapsedTime}ms)`
+      )
       console.log(`[MATTER_ROOM] === NPC 스폰 요청 처리 종료 ===`)
     }
   }
 
   // 실제 스폰 처리
-  private processSpawnRequest(spawnData: {count: number, size: number, followerCount?: number, followerSize?: number}) {
+  private processSpawnRequest(spawnData: {
+    count: number
+    size: number
+    followerCount?: number
+    followerSize?: number
+  }) {
     const processStartTime = Date.now()
     console.log(`[MATTER_ROOM] === 실제 스폰 처리 시작 ===`)
     console.log(`[MATTER_ROOM] 스폰 데이터:`, spawnData)
-    
+
     this.isSpawningNpcs = true
     this.lastSpawnTime = Date.now()
 
-    console.log(`[MATTER_ROOM] NPC 스폰 시작: ${spawnData.count}개 리더, ${spawnData.followerCount}명 팔로워`)
+    console.log(
+      `[MATTER_ROOM] NPC 스폰 시작: ${spawnData.count}개 리더, ${spawnData.followerCount}명 팔로워`
+    )
 
     try {
       console.log(`[MATTER_ROOM] NpcWanderManager.spawnNpcs 호출 시작`)
@@ -691,7 +716,7 @@ export class MatterRoom extends Room<State> {
     } finally {
       this.isSpawningNpcs = false
       console.log(`[MATTER_ROOM] 스폰 상태 해제: isSpawningNpcs = false`)
-      
+
       // 큐에 대기 중인 요청 처리
       if (this.spawnQueue.length > 0) {
         const nextRequest = this.spawnQueue.shift()
@@ -705,9 +730,11 @@ export class MatterRoom extends Room<State> {
       } else {
         console.log(`[MATTER_ROOM] 큐가 비어있음`)
       }
-      
+
       const processElapsedTime = Date.now() - processStartTime
-      console.log(`[MATTER_ROOM] 실제 스폰 처리 완료 (소요시간: ${processElapsedTime}ms)`)
+      console.log(
+        `[MATTER_ROOM] 실제 스폰 처리 완료 (소요시간: ${processElapsedTime}ms)`
+      )
       console.log(`[MATTER_ROOM] === 실제 스폰 처리 종료 ===`)
     }
   }
@@ -825,18 +852,28 @@ export class MatterRoom extends Room<State> {
       if (player) {
         player.point += 50
         // player에게만 메세지 보내기
-        const targetClient = this.clients.find(client => client.sessionId === bullet.owner_id)
+        const targetClient = this.clients.find(
+          (client) => client.sessionId === bullet.owner_id
+        )
         if (targetClient) {
-          targetClient.send('add_score', { amount: 50, position: { x: npc.x, y: npc.y } })
+          targetClient.send('add_score', {
+            amount: 50,
+            position: { x: npc.x, y: npc.y },
+          })
         }
       }
     } else {
       // 플레이어 점수 추가 (데미지만)
       if (player) {
         player.point += 10
-        const targetClient = this.clients.find(client => client.sessionId === bullet.owner_id)
+        const targetClient = this.clients.find(
+          (client) => client.sessionId === bullet.owner_id
+        )
         if (targetClient) {
-          targetClient.send('add_score', { amount: 10, position: { x: npc.x, y: npc.y } })
+          targetClient.send('add_score', {
+            amount: 10,
+            position: { x: npc.x, y: npc.y },
+          })
         }
       }
     }
@@ -973,15 +1010,16 @@ export class MatterRoom extends Room<State> {
   private checkAndAutoSpawnNpcs() {
     const currentNpcCount = this.state.npcs.size
     const targetNpcCount = 15 // 목표 NPC 수 증가 (10 -> 15)
-    
-    if (currentNpcCount < 8 && !this.isSpawningNpcs) { // 스폰 조건 완화 (5 -> 8)
+
+    if (currentNpcCount < 8 && !this.isSpawningNpcs) {
+      // 스폰 조건 완화 (5 -> 8)
       console.log(`[AUTO_SPAWN] NPC 개수: ${currentNpcCount}/8, 자동 스폰 시작`)
-      
+
       // 스폰할 NPC 개수 계산 (최대 10개까지)
       const npcsToSpawn = Math.min(targetNpcCount - currentNpcCount, 10) // 한 번에 최대 10개씩
-      
+
       this.isSpawningNpcs = true
-      
+
       setTimeout(() => {
         try {
           if (this.npcWanderManager) {

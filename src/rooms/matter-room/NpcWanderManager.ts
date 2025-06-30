@@ -12,11 +12,11 @@ import { NpcBaseController } from './NpcBaseController'
 import { NpcCombatManager } from './NpcCombatManager'
 import { MatterRoom } from './MatterRoom'
 
-const NPC_MOVE_RADIUS = 200 // NPC 이동 반경
-const NPC_SPEED = 50 // 모든 NPC의 이동 속도(50)
-const NPC_LEADER_SPEED = 80 // 리더 NPC의 이동 속도 (더 빠르게)
-const NPC_RETURN_TO_FORMATION_TIME = 5000 // 팔로워가 대형으로 돌아가는 시간 (5초)
-const NPC_RETURN_TO_FORMATION_DISTANCE = 300 // 팔로워가 대형으로 돌아가는 거리
+const NPC_MOVE_RADIUS = 800 // NPC 이동 반경
+const NPC_SPEED = 100 // 모든 NPC의 이동 속도
+const NPC_LEADER_SPEED = 100 // 리더 NPC의 이동 속도 (더 빠르게)
+const NPC_RETURN_TO_FORMATION_TIME = 10000 // 팔로워가 대형으로 돌아가는 시간 (10초)
+const NPC_RETURN_TO_FORMATION_DISTANCE = 1000 // 팔로워가 대형으로 돌아가는 거리
 
 export class NpcWanderManager extends NpcBaseController {
   private npcTargets: Map<string, { x: number; y: number }> = new Map() // 각 NPC별 목표 지점
