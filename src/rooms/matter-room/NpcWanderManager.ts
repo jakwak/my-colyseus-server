@@ -1,5 +1,5 @@
 import Matter from 'matter-js'
-import { createNpcBody, SCREEN_WIDTH, SCREEN_HEIGHT } from './physics'
+import { createNpcBody, SCREEN_WIDTH, SCREEN_HEIGHT, CATEGORY_PLAYER, CATEGORY_WALL, CATEGORY_BULLET, CATEGORY_NPC } from './physics'
 import { Bullet, Npc, Player } from '../schema/MatterRoomState'
 import { MapSchema } from '@colyseus/schema'
 import { NpcFollowerManager, NpcFormationType } from './NpcFollowerManager'
@@ -258,12 +258,17 @@ export class NpcWanderManager extends NpcBaseController {
         )})`
       )
 
-      // NPC 바디 생성
+      // NPC 바디 생성 (NPC들끼리 충돌하지 않도록 충돌 그룹 설정)
       const npcBody = Matter.Bodies.circle(x, y, size, {
         label: leader_id,
         friction: 0.1,
         restitution: 0.6,
         density: 0.001,
+        collisionFilter: {
+          group: -1, // NPC 전용 충돌 그룹 (음수 값으로 설정하여 다른 그룹과 충돌하지 않음)
+          category: CATEGORY_NPC,
+          mask: CATEGORY_PLAYER | CATEGORY_WALL | CATEGORY_BULLET // 플레이어, 벽, 총알과만 충돌
+        }
       })
 
       console.log(`[WANDER] NPC 바디 생성 완료: ${leader_id}`)
