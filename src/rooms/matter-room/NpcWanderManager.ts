@@ -258,23 +258,10 @@ export class NpcWanderManager extends NpcBaseController {
         )})`
       )
 
-      // NPC 바디 생성 (NPC들끼리 충돌하지 않도록 충돌 그룹 설정)
-      const npcBody = Matter.Bodies.circle(x, y, size, {
-        label: leader_id,
-        friction: 0.1,
-        restitution: 0.6,
-        density: 0.001,
-        collisionFilter: {
-          group: -1, // NPC 전용 충돌 그룹 (음수 값으로 설정하여 다른 그룹과 충돌하지 않음)
-          category: CATEGORY_NPC,
-          mask: CATEGORY_PLAYER | CATEGORY_WALL | CATEGORY_BULLET // 플레이어, 벽, 총알과만 충돌
-        }
-      })
+      // NPC 바디 생성 (createNpcBody 함수 사용)
+      const npcBody = createNpcBody(this.world, leader_id, x, y, size / 2)
 
       console.log(`[WANDER] NPC 바디 생성 완료: ${leader_id}`)
-
-      // 월드에 바디 추가
-      Matter.World.add(this.world, npcBody)
       console.log(`[WANDER] 월드에 NPC 바디 추가 완료: ${leader_id}`)
 
       // NPC 객체 생성
