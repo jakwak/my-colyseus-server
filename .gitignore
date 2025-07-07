@@ -4,3 +4,5 @@ build
 .devmode.json
 /.defold/api
 logs
+ecosystem.config.js
+ecosystem.config.cjs

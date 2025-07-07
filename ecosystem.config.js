@@ -28,14 +28,6 @@ module.exports = {
         SPAWN_COOLDOWN: '2000',
         MAX_MEMORY_MB: '150'
       },
-      error_file: '/Users/ondalssam/Desktop/my-colyseus-server/logs/colyseus-error.log',
-      out_file: '/Users/ondalssam/Desktop/my-colyseus-server/logs/colyseus-out.log',
-      log_file: '/Users/ondalssam/Desktop/my-colyseus-server/logs/colyseus-combined.log',
-      time: true,
-      log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
-      merge_logs: false,
-      log_type: 'text',
-      disable_source_map_support: true
     },
     {
       name: 'svkit-1',
