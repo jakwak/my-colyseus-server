@@ -6,3 +6,4 @@ build
 logs
 ecosystem.config.js
 ecosystem.config.cjs
+.DS_Store
