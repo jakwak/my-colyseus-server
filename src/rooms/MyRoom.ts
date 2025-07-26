@@ -12,7 +12,7 @@ export class MyRoom extends Room {
       const player = this.state.players.get(client.sessionId);
       if (player) {
         player.x = data.x;
-        player.y = data.y;
+        player.y = data.y; 
       }
     });
 

@@ -338,7 +338,7 @@ export class MatterRoom extends Room<State> {
 
       if (currentNpcCount > 0) {
         // 모든 NPC ID 수집
-        const npcIds = Array.from(this.state.npcs.keys())
+        const npcIds = Array.from(this.state.npcs.keys()) as string[]
 
         // NPC 제거 (안전하게)
         npcIds.forEach((npcId) => {
@@ -419,7 +419,7 @@ export class MatterRoom extends Room<State> {
   }
 
   private removeBullet(bulletId: string) {
-    if (!bulletId) return
+    if (typeof bulletId !== "string") return;
     // Matter.js 바디도 안전하게 삭제
     const body = this.world.bodies.find((b) => b.label === bulletId)
     if (body) {
@@ -429,16 +429,16 @@ export class MatterRoom extends Room<State> {
     }
     // MapSchema에서 존재할 때만 삭제
     if (this.state.playerBullets.has(bulletId)) {
-      this.state.playerBullets.delete(bulletId as any)
+      this.state.playerBullets.delete(bulletId)
     }
     if (this.state.npcBullets.has(bulletId)) {
-      this.state.npcBullets.delete(bulletId as any)
+      this.state.npcBullets.delete(bulletId)
     }
   }
 
   private removeNpc(npcId: string) {
     // npcId가 npc_로 시작하는지 확인
-    if (!npcId.startsWith('npc_')) {
+    if (typeof npcId !== "string" || !npcId.startsWith('npc_')) {
       return
     }
 
@@ -473,8 +473,8 @@ export class MatterRoom extends Room<State> {
       // 모든 총알 제거 (안전한 방식으로)
       console.log(`방 ${this.roomId} 총알 정리`)
       try {
-        const playerBulletIds = Array.from(this.state.playerBullets.keys())
-        const npcBulletIds = Array.from(this.state.npcBullets.keys())
+        const playerBulletIds = Array.from(this.state.playerBullets.keys()) as string[]
+        const npcBulletIds = Array.from(this.state.npcBullets.keys()) as string[]
 
         playerBulletIds.forEach((bulletId) => {
           try {
@@ -498,7 +498,7 @@ export class MatterRoom extends Room<State> {
       // 모든 NPC 제거 (안전한 방식으로)
       console.log(`방 ${this.roomId} NPC 정리`)
       try {
-        const npcIds = Array.from(this.state.npcs.keys())
+        const npcIds = Array.from(this.state.npcs.keys()) as string[]
         npcIds.forEach((npcId) => {
           try {
             this.removeNpc(npcId)

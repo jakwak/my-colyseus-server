@@ -8,7 +8,7 @@
     "node": ">= 20.9.0"
   },
   "scripts": {
-    "start": "tsx watch src/index.ts",
+    "start": "PORT=2568 tsx watch src/index.ts",
     "start:prod": "node --expose-gc build/index.js",
     "start:dev": "node --expose-gc -r tsx/cjs src/index.ts",
     "start:pm2": "tsx src/index.ts",

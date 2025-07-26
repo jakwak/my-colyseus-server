@@ -7,6 +7,7 @@ import { playground } from '@colyseus/playground'
  */
 import { MyRoom } from './rooms/MyRoom'
 import { MatterRoom } from './rooms/matter-room/MatterRoom'
+import { QRoom } from './rooms/qna/QRoom'
 
 export default config({
   options: {
@@ -17,6 +18,7 @@ export default config({
      * Define your room handlers:
      */
     gameServer.define('my_room', MyRoom)
+    gameServer.define('q_room', QRoom)
 
     // matter_room 정의
     gameServer.define('matter_room', MatterRoom)
