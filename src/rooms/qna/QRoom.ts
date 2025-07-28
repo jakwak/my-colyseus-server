@@ -7,6 +7,14 @@ export class QRoom extends Room {
   onCreate(options: any) {
     this.state = new MyState()
     this.setSeatReservationTime(15)
+    this.onMessage('correct_number', (client, message) => {
+      if (this.state.correct_number === message.correct_number) {
+        this.state.correct_number = 0
+      } else {
+        this.state.correct_number = message.correct_number
+      }
+      console.log('correct_number--->', this.state.correct_number)
+    })
   }
 
   onJoin(
@@ -25,6 +33,9 @@ export class QRoom extends Room {
     
     if (options.username === '선생님') {
       this.state.teacher_ready = true
+      this.state.all_ready = false
+      this.state.correct_number = 0
+      console.log('teacher_ready--->', this.state.teacher_ready, this.state.all_ready, this.state.correct_number)
     }
     
     this.state.users.set(
