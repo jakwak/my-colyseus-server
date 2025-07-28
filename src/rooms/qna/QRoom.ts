@@ -45,7 +45,13 @@ export class QRoom extends Room {
   }
 
   onLeave(client: Client<any, any>, consented?: boolean): void | Promise<any> {
-    if (this.state.users.get(client.sessionId)) {
+    const user = this.state.users.get(client.sessionId)
+    if (user) {
+      if (user.username === '선생님') {
+        this.state.teacher_ready = false
+        this.state.all_ready = false
+        this.state.correct_number = 0
+      }
       this.state.users.delete(client.sessionId)
     }
   }
