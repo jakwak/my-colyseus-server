@@ -6,14 +6,19 @@ export class QRoom extends Room {
   
   onCreate(options: any) {
     this.state = new MyState()
-    this.setSeatReservationTime(15)
-    this.onMessage('correct_number', (client, message) => {
-      if (this.state.correct_number === message.correct_number) {
-        this.state.correct_number = 0
-      } else {
-        this.state.correct_number = message.correct_number
-      }
+    this.setSeatReservationTime(60) // 60초로 증가
+
+    this.onMessage('correct_number', (client, number) => {
+      this.state.correct_number =  number
       console.log('correct_number--->', this.state.correct_number)
+    })
+
+    this.onMessage('number_clicked', (client, number) => {
+      const user = this.state.users.get(client.sessionId)
+      if (user) {
+        user.answer_number =  number
+        console.log('number_clicked--->', user.username, user.answer_number)
+      }
     })
   }
 
