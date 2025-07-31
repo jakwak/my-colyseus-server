@@ -8,16 +8,16 @@ export class QRoom extends Room {
     this.state = new MyState()
     this.setSeatReservationTime(60) // 60초로 증가
 
-    this.onMessage('correct_number', (client, number) => {
-      this.state.correct_number =  number
-      console.log('correct_number--->', this.state.correct_number)
+    this.onMessage('correctNumber', (client, number) => {
+      this.state.correctNumber =  number
+      console.log('correctNumber--->', this.state.correctNumber)
     })
 
-    this.onMessage('number_clicked', (client, number) => {
+    this.onMessage('numberClicked', (client, number) => {
       const user = this.state.users.get(client.sessionId)
       if (user) {
-        user.answer_number =  number
-        console.log('number_clicked--->', user.username, user.answer_number)
+        user.answerNumber =  number
+        console.log('numberClicked--->', user.username, user.answerNumber)
       }
     })
   }
@@ -32,15 +32,13 @@ export class QRoom extends Room {
       return
     }
     
-    client.send('__playground_message_types', {
-      message: 'Hello from server',
-    })
+    // client.send('__playground_message_types', {
+    //   message: 'Hello from server',
+    // })
     
     if (options.username === '선생님') {
-      this.state.teacher_ready = true
-      this.state.all_ready = false
-      this.state.correct_number = 0
-      console.log('teacher_ready--->', this.state.teacher_ready, this.state.all_ready, this.state.correct_number)
+      this.state.teacherReady = true
+      this.state.correctNumber = 0
     }
     
     this.state.users.set(
@@ -53,9 +51,8 @@ export class QRoom extends Room {
     const user = this.state.users.get(client.sessionId)
     if (user) {
       if (user.username === '선생님') {
-        this.state.teacher_ready = false
-        this.state.all_ready = false
-        this.state.correct_number = 0
+        this.state.teacherReady = false
+        this.state.correctNumber = 0
       }
       this.state.users.delete(client.sessionId)
     }
