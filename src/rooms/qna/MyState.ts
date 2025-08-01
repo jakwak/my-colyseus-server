@@ -29,10 +29,17 @@ export class QuestionSet extends Schema {
   @type({ map: Question }) questions = new MapSchema<Question>()
 }
 
+export class ButtonPosition extends Schema {
+  @type('number') x: number = 0
+  @type('number') y: number = 0
+  @type('number') size: number = 48
+}
+
 export class MyState extends Schema {
   @type('number') correctNumber: number = 0
   @type('boolean') teacherReady: boolean = false
   @type({ map: User }) users = new MapSchema<User>()
   @type({ map: QuestionSet }) questionSets = new MapSchema<QuestionSet>()
   @type(Question) currentQuestion: Question = new Question()
+  @type({ map: ButtonPosition }) buttonPositions = new MapSchema<ButtonPosition>()
 }

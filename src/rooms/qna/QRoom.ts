@@ -1,5 +1,5 @@
 import { Client, Room } from '@colyseus/core'
-import { MyState, User } from './MyState'
+import { MyState, User, ButtonPosition } from './MyState'
 
 export class QRoom extends Room {
   maxClients = 20 // 최대 클라이언트 수 설정
@@ -19,6 +19,22 @@ export class QRoom extends Room {
         user.answerNumber =  number
         console.log('numberClicked--->', user.username, user.answerNumber)
       }
+    })
+
+    this.onMessage('buttonPositions', (client, positions: any) => {
+      // 기존 버튼 위치 정보 초기화
+      this.state.buttonPositions.clear()
+      
+      // 새로운 버튼 위치 정보 설정
+      Object.entries(positions).forEach(([buttonNumber, position]: [string, any]) => {
+        const buttonPos = new ButtonPosition()
+        buttonPos.x = position.x
+        buttonPos.y = position.y
+        buttonPos.size = position.size
+        this.state.buttonPositions.set(buttonNumber, buttonPos)
+      })
+      
+      console.log('buttonPositions--->', positions)
     })
   }
 
