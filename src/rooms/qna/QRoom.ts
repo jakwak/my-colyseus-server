@@ -32,10 +32,6 @@ export class QRoom extends Room {
       return
     }
     
-    // client.send('__playground_message_types', {
-    //   message: 'Hello from server',
-    // })
-    
     if (options.username === '선생님') {
       this.state.teacherReady = true
       this.state.correctNumber = 0
