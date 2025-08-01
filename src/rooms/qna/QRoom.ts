@@ -31,6 +31,7 @@ export class QRoom extends Room {
         buttonPos.x = position.x
         buttonPos.y = position.y
         buttonPos.size = position.size
+        buttonPos.text = position.text || '' // 텍스트 정보 추가
         this.state.buttonPositions.set(buttonNumber, buttonPos)
       })
       

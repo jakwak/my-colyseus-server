@@ -33,6 +33,7 @@ export class ButtonPosition extends Schema {
   @type('number') x: number = 0
   @type('number') y: number = 0
   @type('number') size: number = 48
+  @type('string') text: string = ''
 }
 
 export class MyState extends Schema {
