@@ -10,14 +10,12 @@ export class QRoom extends Room {
 
     this.onMessage('correctNumber', (client, number) => {
       this.state.correctNumber =  number
-      console.log('correctNumber--->', this.state.correctNumber)
     })
 
     this.onMessage('numberClicked', (client, number) => {
       const user = this.state.users.get(client.sessionId)
       if (user) {
         user.answerNumber =  number
-        console.log('numberClicked--->', user.username, user.answerNumber)
       }
     })
 
@@ -34,8 +32,6 @@ export class QRoom extends Room {
         buttonPos.text = position.text || '' // 텍스트 정보 추가
         this.state.buttonPositions.set(buttonNumber, buttonPos)
       })
-      
-      console.log('buttonPositions--->', positions)
     })
   }
 
