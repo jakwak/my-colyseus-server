@@ -1,4 +1,4 @@
-import { Schema, type, MapSchema } from '@colyseus/schema'
+import { Schema, type, MapSchema, ArraySchema } from '@colyseus/schema'
 
 export class User extends Schema {
   @type('string') id: string = ''
@@ -14,13 +14,18 @@ export class User extends Schema {
   }
 }
 
+export class Answer extends Schema {
+  @type('number') x: number = 0
+  @type('number') y: number = 0
+  @type('number') size: number = 48
+  @type('string') text: string = ''
+  @type('boolean') isCorrect: boolean = false
+}
+
 export class Question extends Schema {
   @type('string') id: string = ''
   @type('string') question: string = ''
-  @type('string') correctAnswer: string = ''
-  @type('string') wrongAnswer1: string = ''
-  @type('string') wrongAnswer2: string = ''
-  @type('string') wrongAnswer3: string = ''
+  @type({ array: Answer }) answers = new ArraySchema<Answer>()
 }
 
 export class QuestionSet extends Schema {
@@ -29,18 +34,10 @@ export class QuestionSet extends Schema {
   @type({ map: Question }) questions = new MapSchema<Question>()
 }
 
-export class ButtonPosition extends Schema {
-  @type('number') x: number = 0
-  @type('number') y: number = 0
-  @type('number') size: number = 48
-  @type('string') text: string = ''
-}
-
 export class MyState extends Schema {
   @type('number') correctNumber: number = 0
   @type('boolean') teacherReady: boolean = false
   @type({ map: User }) users = new MapSchema<User>()
   @type({ map: QuestionSet }) questionSets = new MapSchema<QuestionSet>()
   @type(Question) currentQuestion: Question = new Question()
-  @type({ map: ButtonPosition }) buttonPositions = new MapSchema<ButtonPosition>()
 }
