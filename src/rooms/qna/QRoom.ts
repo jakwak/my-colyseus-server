@@ -34,6 +34,10 @@ export class QRoom extends Room {
         this.state.currentQuestion.answers.push(answerObj)
       })
     })
+
+    this.onMessage('setVerticalAlign', (client, isVertical: boolean) => {
+      this.state.isVerticalAlign = isVertical
+    })
   }
 
   onJoin(

@@ -37,6 +37,7 @@ export class QuestionSet extends Schema {
 export class MyState extends Schema {
   @type('number') correctNumber: number = 0
   @type('boolean') teacherReady: boolean = false
+  @type('boolean') isVerticalAlign: boolean = false
   @type({ map: User }) users = new MapSchema<User>()
   @type({ map: QuestionSet }) questionSets = new MapSchema<QuestionSet>()
   @type(Question) currentQuestion: Question = new Question()
